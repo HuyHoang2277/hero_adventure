@@ -12,10 +12,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f5d7c8093ca04a54e8868385ec2de9fb, type: 3}
   m_Name: Slime
   m_EditorClassIdentifier: 
-  maxHealth: 25
-  baseShield: 10
-  baseBlockRate: 10
-  baseDamage: 10
+  maxHealth: 60
+  baseShield: 5
+  baseBlockRate: 5
+  baseDamage: 8
   baseCritRate: 5
   baseCritDamage: 50
   characterAnim: {fileID: 9100000, guid: a5f31a162b14bf94d93564973e91b2a4, type: 2}

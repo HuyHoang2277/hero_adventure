@@ -40,7 +40,7 @@ public class SecureGameData
     [SerializeField] private int _diamond = 0;
     [SerializeField] private int _playerLevel = 1;
     [SerializeField] private int _currentExp = 0;
-    [SerializeField] private int _maxUnlockedLevel = 0;
+    [SerializeField] private int _maxUnlockedLevel = 1;
     [SerializeField] private int[] _levelStars = new int[100];
 
     #region CONST
@@ -52,7 +52,7 @@ public class SecureGameData
     private const int DEFAULT_DIAMOND = 0;
     private const int DEFAULT_PLAYER_LEVEL = 1;
     private const int DEFAULT_EXP = 0;
-    private const int DEFAULT_UNLOCKED_LEVEL = 0;
+    private const int DEFAULT_UNLOCKED_LEVEL = 1;
     #endregion
 
     #region PROPERTIES
@@ -112,7 +112,7 @@ public class SecureGameData
         this._diamond = other._diamond;
         this._playerLevel = other._playerLevel;
         this._currentExp = other._currentExp;
-        this._maxUnlockedLevel = other._maxUnlockedLevel;
+        this._maxUnlockedLevel = Mathf.Max(1, other._maxUnlockedLevel);
 
         if (other._levelStars != null)
         {

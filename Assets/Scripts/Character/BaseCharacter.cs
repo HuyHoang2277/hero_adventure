@@ -18,9 +18,11 @@ public class BaseCharacter : MonoBehaviour
     protected float currentCritRate;
     protected float currentCritDamage;
     protected float currentBlockRate;
-    private const float MAX_DODGE = 80f;
+    private const float MAX_DODGE = 40f;
 
     private Vector3 originalPosition;
+    private Vector3 initialSpawnPosition;
+    private bool hasRecordedInitialPos = false;
 
     public float CurrentHealth => currentHealth;
     public float CurrentMaxHealth => currentMaxHealth;
@@ -54,7 +56,16 @@ public class BaseCharacter : MonoBehaviour
         if (animator != null) animator.runtimeAnimatorController = baseStatData.characterAnim;
         if (spriteRenderer != null) spriteRenderer.sprite = baseStatData.defaultCharacterSprite;
 
-        originalPosition = transform.position;
+        if (!hasRecordedInitialPos)
+        {
+            initialSpawnPosition = transform.position;
+            hasRecordedInitialPos = true;
+        }
+        else
+        {
+            transform.position = initialSpawnPosition;
+        }
+        originalPosition = initialSpawnPosition;
 
         if (animator != null)
         {
@@ -84,7 +95,6 @@ public class BaseCharacter : MonoBehaviour
 
         bool isCrit;
         float rawDamage = CalculateDamage(out isCrit) * damageMultiplier;
-        AddDamage((damageMultiplier - 1f));
         string animParam = isCrit ? GameConstants.AnimParams.IsCritAttacking : GameConstants.AnimParams.IsBaseAttacking;
 
         if (AudioManager.Instance != null)
@@ -192,13 +202,7 @@ public class BaseCharacter : MonoBehaviour
 
     public virtual void Heal(float amount)
     {
-        if (currentHealth >= currentMaxHealth)
-        {
-            amount /= 2f;
-            currentMaxHealth = RoundStat(currentMaxHealth + amount);
-        }
-        currentHealth = RoundStat(currentHealth + amount);
-        currentHealth = Mathf.Clamp(currentHealth, 0, currentMaxHealth);
+        currentHealth = RoundStat(Mathf.Min(currentMaxHealth, currentHealth + amount));
         BroadcastUIUpdate();
     }
 
@@ -210,19 +214,20 @@ public class BaseCharacter : MonoBehaviour
 
     public virtual void AddShield(float amount)
     {
-        currentShield = RoundStat(currentShield + amount);
+        float maxShieldCap = RoundStat(currentMaxHealth * 0.75f);
+        currentShield = RoundStat(Mathf.Min(maxShieldCap, currentShield + amount));
         BroadcastUIUpdate();
     }
 
     public virtual void AddCritRate(float amount)
     {
-        currentCritRate = RoundStat(Mathf.Clamp(currentCritRate + amount, 0, 100f));
+        currentCritRate = RoundStat(Mathf.Clamp(currentCritRate + amount, 0, 50f));
         BroadcastUIUpdate();
     }
 
     public virtual void AddCritDamage(float amount)
     {
-        currentCritDamage = RoundStat(currentCritDamage + amount);
+        currentCritDamage = RoundStat(Mathf.Clamp(currentCritDamage + amount, 50f, 150f));
         BroadcastUIUpdate();
     }
 

@@ -1,15 +1,15 @@
-using System.Collections.Generic;
 using UnityEngine;
 
 public class GridInput : MonoBehaviour
 {
-    [SerializeField] private LineRendererManager lineManager;
+    [SerializeField] private LineRendererManager lineManager; // Kept for inspector compatibility
     [SerializeField] private GameGrid gameGrid;
     [SerializeField] private LayerMask gemLayer;
+    [SerializeField] private float swipeThreshold = 0.35f;
 
-    private bool isDrawing = false;
-    private List<Gem> selectedGems = new List<Gem>();
-    private GemType currentGemType;
+    private Gem selectedGem;
+    private Vector3 dragStartPos;
+    private bool isDragging = false;
 
     private void Update()
     {
@@ -18,7 +18,18 @@ public class GridInput : MonoBehaviour
 
     private void HandleInput()
     {
-        if (BattleManager.Instance != null && BattleManager.Instance.CurrentState != GameState.PlayerTurn) return;
+        // Don't accept input if not player turn or if grid is animating/processing
+        if (BattleManager.Instance != null && BattleManager.Instance.CurrentState != GameState.PlayerTurn)
+        {
+            DeselectCurrent();
+            return;
+        }
+
+        if (gameGrid != null && gameGrid.IsProcessing)
+        {
+            DeselectCurrent();
+            return;
+        }
 
         Vector3 pointerWorldPos = InputHelper.GetPointerWorldPosition();
 
@@ -27,50 +38,98 @@ public class GridInput : MonoBehaviour
             Gem hitGem = GetGemAtPosition(pointerWorldPos);
             if (hitGem != null)
             {
-                if (AudioManager.Instance != null) AudioManager.Instance.PlayGemSelect();
-                isDrawing = true;
-                selectedGems.Clear();
-                lineManager.ClearLine();
-                lineManager.LineColor = hitGem.GetGemData().lineColor;
-                AddGemToSelection(hitGem);
-                currentGemType = hitGem.GetGemData().gemType;
+                if (selectedGem == null)
+                {
+                    SelectGem(hitGem, pointerWorldPos);
+                }
+                else
+                {
+                    // If tapped an adjacent gem, execute swap!
+                    if (IsAdjacent(selectedGem, hitGem))
+                    {
+                        Vector2Int from = selectedGem.gridPosition;
+                        Vector2Int to = hitGem.gridPosition;
+                        DeselectCurrent();
+                        gameGrid.TrySwap(from, to, true);
+                    }
+                    else if (selectedGem == hitGem)
+                    {
+                        DeselectCurrent();
+                    }
+                    else
+                    {
+                        // Selected a new non-adjacent gem
+                        DeselectCurrent();
+                        SelectGem(hitGem, pointerWorldPos);
+                    }
+                }
+            }
+            else
+            {
+                DeselectCurrent();
             }
         }
 
-        if (InputHelper.GetPointerHeld() && isDrawing)
+        if (InputHelper.GetPointerHeld() && isDragging && selectedGem != null)
         {
-            Gem hitGem = GetGemAtPosition(pointerWorldPos);
+            Vector3 delta = pointerWorldPos - dragStartPos;
 
-            if (hitGem != null)
+            if (delta.magnitude >= swipeThreshold)
             {
-                if (!selectedGems.Contains(hitGem))
+                Vector2Int dir = Vector2Int.zero;
+
+                if (Mathf.Abs(delta.x) > Mathf.Abs(delta.y))
                 {
-                    if (hitGem.GetGemData().gemType == currentGemType && IsAdjacent(selectedGems[selectedGems.Count - 1], hitGem))
-                    {
-                        if (AudioManager.Instance != null) AudioManager.Instance.PlayGemDrag();
-                        AddGemToSelection(hitGem);
-                    }
+                    dir = delta.x > 0 ? new Vector2Int(1, 0) : new Vector2Int(-1, 0);
                 }
-                else if (selectedGems.Count > 1 && hitGem == selectedGems[selectedGems.Count - 2])
+                else
                 {
-                    RemoveLastGemFromSelection();
+                    // In grid coords, world Y up is grid y - 1, world Y down is grid y + 1
+                    dir = delta.y > 0 ? new Vector2Int(0, -1) : new Vector2Int(0, 1);
+                }
+
+                Vector2Int targetPos = selectedGem.gridPosition + dir;
+
+                if (gameGrid.IsValidGridPos(targetPos))
+                {
+                    Vector2Int from = selectedGem.gridPosition;
+                    DeselectCurrent();
+                    gameGrid.TrySwap(from, targetPos, true);
+                }
+                else
+                {
+                    DeselectCurrent();
                 }
             }
         }
 
         if (InputHelper.GetPointerUp())
         {
-            isDrawing = false;
-
-            if (selectedGems.Count >= gameGrid.MatchThreshold)
-            {
-                gameGrid.ProcessMatch(selectedGems);
-                Debug.Log($"Matched {selectedGems.Count} gems of type {currentGemType}");
-            }
-
-            lineManager.ClearLine();
-            selectedGems.Clear();
+            isDragging = false;
         }
+    }
+
+    private void SelectGem(Gem gem, Vector3 worldPos)
+    {
+        selectedGem = gem;
+        dragStartPos = worldPos;
+        isDragging = true;
+        selectedGem.SetSelected(true);
+
+        if (AudioManager.Instance != null)
+        {
+            AudioManager.Instance.PlayGemSelect();
+        }
+    }
+
+    private void DeselectCurrent()
+    {
+        if (selectedGem != null)
+        {
+            selectedGem.SetSelected(false);
+            selectedGem = null;
+        }
+        isDragging = false;
     }
 
     private Gem GetGemAtPosition(Vector2 pos)
@@ -83,22 +142,9 @@ public class GridInput : MonoBehaviour
         return null;
     }
 
-    private void AddGemToSelection(Gem gem)
-    {
-        selectedGems.Add(gem);
-        lineManager.AddPoint(gem.transform.position);
-    }
-
-    private void RemoveLastGemFromSelection()
-    {
-        selectedGems.RemoveAt(selectedGems.Count - 1);
-        lineManager.RemoveLastPoint();
-    }
-
     private bool IsAdjacent(Gem g1, Gem g2)
     {
-        int dx = Mathf.Abs(g1.gridPosition.x - g2.gridPosition.x);
-        int dy = Mathf.Abs(g1.gridPosition.y - g2.gridPosition.y);
-        return (dx <= 1 && dy <= 1) && (dx + dy > 0);
+        int dist = Mathf.Abs(g1.gridPosition.x - g2.gridPosition.x) + Mathf.Abs(g1.gridPosition.y - g2.gridPosition.y);
+        return dist == 1;
     }
 }

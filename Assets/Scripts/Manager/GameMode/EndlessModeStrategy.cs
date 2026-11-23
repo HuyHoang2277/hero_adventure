@@ -8,7 +8,7 @@ public class EndlessModeStrategy : IGameModeStrategy
     private float difficultyMultiplier;
     public int CurrentRound => currentRound;
 
-    private const float IncrementPerRound = 0.1f;
+    private const float IncrementPerRound = 0.15f;
 
     public void Initialize(BattleManager battleManager)
     {

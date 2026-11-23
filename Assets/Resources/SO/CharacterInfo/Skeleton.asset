@@ -12,10 +12,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f5d7c8093ca04a54e8868385ec2de9fb, type: 3}
   m_Name: Skeleton
   m_EditorClassIdentifier: 
-  maxHealth: 35
-  baseShield: 5
+  maxHealth: 80
+  baseShield: 10
   baseBlockRate: 5
-  baseDamage: 10
+  baseDamage: 12
   baseCritRate: 5
   baseCritDamage: 50
   characterAnim: {fileID: 9100000, guid: 8c8cb47de1694bd4cbe24a2e96d269f7, type: 2}

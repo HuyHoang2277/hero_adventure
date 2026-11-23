@@ -2,6 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
+using DG.Tweening;
 
 public class BattleManager : Singleton<BattleManager>
 {
@@ -10,7 +11,7 @@ public class BattleManager : Singleton<BattleManager>
     public GameState CurrentState => currentState;
     private GameState previousState;
 
-    [SerializeField] private int maxActionPoints = 5;
+    [SerializeField] private int maxActionPoints = 1;
     [SerializeField] private int currentActionPoints;
 
     [Header("Level Progress")]
@@ -37,6 +38,18 @@ public class BattleManager : Singleton<BattleManager>
     protected override void Awake()
     {
         base.Awake();
+        if (maxActionPoints <= 0) maxActionPoints = 1;
+        EnsureCharacterParent();
+    }
+
+    private void EnsureCharacterParent()
+    {
+        if (characterParent == null)
+        {
+            GameObject container = GameObject.Find("EnemiesContainer");
+            if (container == null) container = new GameObject("EnemiesContainer");
+            characterParent = container.transform;
+        }
     }
 
     private void OnEnable()
@@ -165,6 +178,8 @@ public class BattleManager : Singleton<BattleManager>
         float difficultyMultiplier = currentStrategy.GetDifficultyMultiplier();
         Debug.Log($"[BattleManager] Spawning {enemiesToSpawn.Count} enemies with difficulty multiplier: {difficultyMultiplier:F2}");
 
+        EnsureCharacterParent();
+
         if (spawnPoints == null || spawnPoints.Length == 0)
         {
             Debug.LogError("[BattleManager] spawnPoints chưa được gán!");
@@ -184,7 +199,7 @@ public class BattleManager : Singleton<BattleManager>
             {
                 if (i >= spawnPoints.Length) break;
 
-                Enemy newEnemy = PoolingManager.Spawn(enemyPrefab, spawnPoints[i].position, Quaternion.identity);
+                Enemy newEnemy = PoolingManager.Spawn(enemyPrefab, spawnPoints[i].position, Quaternion.identity, characterParent);
                 newEnemy.InitStat(enemiesToSpawn[i]);
                 newEnemy.ApplyDifficultyMultiplier(difficultyMultiplier);
                 activeEnemies.Add(newEnemy);
@@ -194,80 +209,130 @@ public class BattleManager : Singleton<BattleManager>
         if (AudioManager.Instance != null) AudioManager.Instance.PlayRoundStart();
     }
 
+    private int currentTurnMatches = 0;
+    private float turnDamage = 0f;
+    private float turnHeal = 0f;
+    private float turnShield = 0f;
+    private float turnCritRate = 0f;
+    private float turnCritDamage = 0f;
+    private float turnDodge = 0f;
+
     private void StartPlayerTurn()
     {
         currentState = GameState.PlayerTurn;
         currentActionPoints = maxActionPoints;
+        ResetTurnAccumulators();
         ObserverManager<EventID>.PostEvent(EventID.OnPlayerTurnStart);
         gameplayUIManager?.UpdateTurnCount(currentActionPoints);
     }
 
+    private void ResetTurnAccumulators()
+    {
+        currentTurnMatches = 0;
+        turnDamage = 0f;
+        turnHeal = 0f;
+        turnShield = 0f;
+        turnCritRate = 0f;
+        turnCritDamage = 0f;
+        turnDodge = 0f;
+    }
+
     private void HandleGemsMatched(object param)
     {
-        if (currentState != GameState.PlayerTurn || player.IsDead()) return;
+        if (player == null || player.IsDead()) return;
 
         if (param is MatchEventData data)
         {
-            StartCoroutine(ProcessMatchRoutine(data));
+            float multiplier = 1f + (data.MatchCount - 3) * multiplierPerGem;
+            float totalPower = data.PowerValue * multiplier;
+
+            currentTurnMatches++;
+
+            switch (data.GemType)
+            {
+                case GemType.Damage: turnDamage += totalPower; break;
+                case GemType.Health: turnHeal += totalPower; break;
+                case GemType.Shield: turnShield += totalPower; break;
+                case GemType.CritRate: turnCritRate += totalPower; break;
+                case GemType.CritDamage: turnCritDamage += totalPower; break;
+                case GemType.Dodge: turnDodge += totalPower; break;
+            }
         }
     }
 
-    private IEnumerator ProcessMatchRoutine(MatchEventData data)
+    public void OnGridTurnCompleted(bool isPlayer)
     {
-        currentState = GameState.Matching;
+        StartCoroutine(TurnCompletedRoutine(isPlayer));
+    }
 
-        float multiplier = 1f + (data.MatchCount - 3) * multiplierPerGem;
-        float totalPower = data.PowerValue * multiplier;
-
-        switch (data.GemType)
+    private IEnumerator TurnCompletedRoutine(bool isPlayer)
+    {
+        // 1. Execute aggregated turn actions once!
+        if (currentTurnMatches > 0)
         {
-            case GemType.Damage:
-                currentState = GameState.SelectingTarget;
+            float comboMultiplier = 1f + Mathf.Max(0, currentTurnMatches - 1) * 0.2f;
 
-                Enemy selectedTarget = null;
+            if (isPlayer)
+            {
+                // Player buffs and healing
+                if (turnHeal > 0) player.Heal(turnHeal * comboMultiplier);
+                if (turnShield > 0) player.AddShield(turnShield * comboMultiplier);
+                if (turnCritRate > 0) player.AddCritRate(turnCritRate);
+                if (turnCritDamage > 0) player.AddCritDamage(turnCritDamage);
+                if (turnDodge > 0) player.AddDodge(turnDodge);
 
-                if (enemySelectionManager != null)
+                // Player single combined attack
+                if (turnDamage > 0)
                 {
-                    yield return StartCoroutine(
-                        enemySelectionManager.SelectTarget(activeEnemies, (t) => selectedTarget = t)
-                    );
+                    currentState = GameState.SelectingTarget;
+                    Enemy selectedTarget = null;
+
+                    if (enemySelectionManager != null)
+                    {
+                        yield return StartCoroutine(
+                            enemySelectionManager.SelectTarget(activeEnemies, (t) => selectedTarget = t)
+                        );
+                    }
+                    else
+                    {
+                        selectedTarget = activeEnemies.Find(e => !e.IsDead());
+                    }
+
+                    currentState = GameState.Matching;
+
+                    if (selectedTarget != null)
+                    {
+                        gameplayUIManager?.ShowEnemyInfo(selectedTarget);
+                        yield return StartCoroutine(player.PerformAttackSequence(selectedTarget, turnDamage * comboMultiplier));
+                        yield return new WaitForSeconds(0.3f);
+                        selectedTarget.HideTargetIndicator();
+                        gameplayUIManager?.HideEnemyInfo();
+                    }
                 }
-                else
+            }
+            else
+            {
+                // Enemy turn actions
+                Enemy actingEnemy = activeEnemies.Find(e => !e.IsDead());
+                if (actingEnemy != null && player != null && !player.IsDead())
                 {
-                    selectedTarget = activeEnemies.Find(e => !e.IsDead());
+                    if (turnHeal > 0) actingEnemy.Heal(turnHeal * comboMultiplier);
+                    if (turnShield > 0) actingEnemy.AddShield(turnShield * comboMultiplier);
+                    if (turnCritRate > 0) actingEnemy.AddCritRate(turnCritRate);
+                    if (turnCritDamage > 0) actingEnemy.AddCritDamage(turnCritDamage);
+                    if (turnDodge > 0) actingEnemy.AddDodge(turnDodge);
+
+                    if (turnDamage > 0)
+                    {
+                        yield return StartCoroutine(actingEnemy.PerformAttackSequence(player, turnDamage * comboMultiplier));
+                        yield return new WaitForSeconds(0.3f);
+                    }
                 }
-
-                currentState = GameState.Matching;
-
-                if (selectedTarget != null)
-                {
-                    gameplayUIManager?.ShowEnemyInfo(selectedTarget);
-                    yield return StartCoroutine(player.PerformAttackSequence(selectedTarget, totalPower));
-                    yield return new WaitForSeconds(0.5f);
-                    selectedTarget.HideTargetIndicator();
-                    gameplayUIManager?.HideEnemyInfo();
-                }
-                break;
-
-            case GemType.Health:
-                player.Heal(totalPower);
-                break;
-            case GemType.Shield:
-                player.AddShield(totalPower);
-                break;
-            case GemType.CritRate:
-                player.AddCritRate(totalPower);
-                break;
-            case GemType.CritDamage:
-                player.AddCritDamage(totalPower);
-                break;
-            case GemType.Dodge:
-                player.AddDodge(totalPower);
-                break;
+            }
         }
 
-        currentActionPoints--;
-        gameplayUIManager?.UpdateTurnCount(currentActionPoints);
+        ResetTurnAccumulators();
+
         activeEnemies.RemoveAll(e => e.IsDead());
 
         if (activeEnemies.Count == 0)
@@ -277,46 +342,94 @@ public class BattleManager : Singleton<BattleManager>
             yield break;
         }
 
-        if (currentActionPoints <= 0 && !player.IsDead())
+        if (isPlayer)
         {
-            StartCoroutine(EnemyTurnRoutine());
-            yield break;
-        }
+            currentActionPoints--;
+            gameplayUIManager?.UpdateTurnCount(currentActionPoints);
 
-        currentState = GameState.PlayerTurn;
+            if (currentActionPoints <= 0 && !player.IsDead())
+            {
+                StartCoroutine(EnemyTurnRoutine());
+            }
+            else if (!player.IsDead())
+            {
+                currentState = GameState.PlayerTurn;
+            }
+        }
+        else
+        {
+            // Enemy turn completed
+            if (!currentStrategy.IsGameOver(player))
+            {
+                StartPlayerTurn();
+            }
+            else
+            {
+                currentState = GameState.Finished;
+                gameplayUIManager?.ShowGameOver(player);
+            }
+        }
     }
 
     private IEnumerator EnemyTurnRoutine()
     {
         currentState = GameState.EnemyTurn;
-        yield return new WaitForSeconds(1f);
+        yield return new WaitForSeconds(0.6f);
 
         ObserverManager<EventID>.PostEvent(EventID.OnEnemyTurnStart);
 
-        foreach (Enemy enemy in activeEnemies)
-        {
-            
-            if (player == null || player.IsDead())
-            {
-                break;
-            }
+        activeEnemies.RemoveAll(e => e.IsDead());
+        if (activeEnemies.Count == 0 || player == null || player.IsDead()) yield break;
 
-            if (!enemy.IsDead())
-            {
-                yield return StartCoroutine(enemy.PerformAttackSequence(player, 1f));
-                yield return new WaitForSeconds(0.5f); 
-            }
-        }
+        Enemy actingEnemy = activeEnemies[0];
 
-        if (!currentStrategy.IsGameOver(player))
+        // 1. AI selects best move from board
+        var possibleMoves = (gameGrid != null) ? gameGrid.FindAllPossibleMoves() : null;
+
+        if (possibleMoves != null && possibleMoves.Count > 0)
         {
-            StartPlayerTurn();
+            GameGrid.ValidMove bestMove = SelectBestEnemyMove(actingEnemy, possibleMoves);
+
+            Debug.Log($"[Enemy AI] {actingEnemy.name} picked swap ({bestMove.from.x},{bestMove.from.y}) -> ({bestMove.to.x},{bestMove.to.y}) [Type: {bestMove.gemType}, Count: {bestMove.matchCount}]");
+
+            // Execute the swap on the board (isPlayer = false)
+            gameGrid.TrySwap(bestMove.from, bestMove.to, false);
+            // GameGrid will call OnGridTurnCompleted(false) when done
         }
         else
         {
-            currentState = GameState.Finished;
-            gameplayUIManager?.ShowGameOver(player);
+            // Fallback: If no moves on board, quái performs standard attack
+            yield return StartCoroutine(actingEnemy.PerformAttackSequence(player, 1f));
+            yield return new WaitForSeconds(0.5f);
+
+            OnGridTurnCompleted(false);
         }
+    }
+
+    private GameGrid.ValidMove SelectBestEnemyMove(Enemy enemy, List<GameGrid.ValidMove> moves)
+    {
+        // 1. If enemy HP < 40%, prioritize Health or Shield
+        float hpPercent = (enemy.CurrentHealth / enemy.CurrentMaxHealth) * 100f;
+        if (hpPercent < 40f)
+        {
+            var healMove = moves.Find(m => m.gemType == GemType.Health);
+            if (healMove.matchCount >= 3) return healMove;
+
+            var shieldMove = moves.Find(m => m.gemType == GemType.Shield);
+            if (shieldMove.matchCount >= 3) return shieldMove;
+        }
+
+        // 2. Prioritize Damage moves to strike Player
+        var damageMoves = moves.FindAll(m => m.gemType == GemType.Damage);
+        if (damageMoves.Count > 0)
+        {
+            damageMoves.Sort((a, b) => b.matchCount.CompareTo(a.matchCount));
+            return damageMoves[0];
+        }
+
+        // 3. Otherwise pick the move with the highest match count
+        moves.Sort((a, b) => b.matchCount.CompareTo(a.matchCount));
+        return moves[0];
     }
 
     public void SetGameState(GameState state)
@@ -344,18 +457,55 @@ public class BattleManager : Singleton<BattleManager>
     public void CleanupBattle()
     {
         StopAllCoroutines();
+        ResetTurnAccumulators();
+        EnsureCharacterParent();
 
-        if (characterParent != null)
+        // 1. Despawn active enemies list
+        foreach (var enemy in activeEnemies)
         {
-            foreach (Transform child in characterParent)
+            if (enemy != null && enemy.gameObject != null)
             {
-                if (child.gameObject.activeInHierarchy)
+                enemy.transform.DOKill();
+                enemy.StopAllCoroutines();
+                enemy.HideTargetIndicator();
+                if (enemy.gameObject.activeInHierarchy)
                 {
-                    PoolingManager.Despawn(child.gameObject);
+                    PoolingManager.Despawn(enemy.gameObject);
                 }
             }
         }
         activeEnemies.Clear();
+
+        // 2. Despawn all children of characterParent
+        if (characterParent != null)
+        {
+            List<GameObject> toDespawn = new List<GameObject>();
+            foreach (Transform child in characterParent)
+            {
+                if (child != null && child.gameObject.activeInHierarchy)
+                {
+                    child.DOKill();
+                    toDespawn.Add(child.gameObject);
+                }
+            }
+            foreach (var go in toDespawn)
+            {
+                PoolingManager.Despawn(go);
+            }
+        }
+
+        // 3. Fallback: Despawn any other Enemy instances found in scene
+        Enemy[] lingeringEnemies = FindObjectsOfType<Enemy>(true);
+        foreach (var enemy in lingeringEnemies)
+        {
+            if (enemy != null && enemy.gameObject.activeInHierarchy)
+            {
+                enemy.transform.DOKill();
+                enemy.StopAllCoroutines();
+                enemy.HideTargetIndicator();
+                PoolingManager.Despawn(enemy.gameObject);
+            }
+        }
 
         if (gameGrid != null)
         {
@@ -365,6 +515,13 @@ public class BattleManager : Singleton<BattleManager>
         if (player != null)
         {
             player.StopAllCoroutines();
+            player.transform.DOKill();
+            player.InitStat();
+        }
+
+        if (gameplayUIManager != null)
+        {
+            gameplayUIManager.HideEnemyInfo();
         }
     }
 }
