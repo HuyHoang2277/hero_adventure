@@ -19,24 +19,43 @@ public class GemSpawner : MonoBehaviour
 
     public GemData GetRandomGemData()
     {
+        return GetRandomGemDataExcept(null);
+    }
+
+    public GemData GetRandomGemDataExcept(List<GemType> excludedTypes)
+    {
+        List<GemData> filtered = new List<GemData>();
         int totalWeight = 0;
+
         foreach (GemData data in gemDataList)
         {
-            totalWeight += data.spawnWeight;
+            if (data == null) continue;
+            if (excludedTypes != null && excludedTypes.Contains(data.gemType))
+                continue;
+
+            filtered.Add(data);
+            int weight = (data.spawnWeight > 0) ? data.spawnWeight : 1;
+            totalWeight += weight;
+        }
+
+        if (filtered.Count == 0)
+        {
+            return gemDataList[Random.Range(0, gemDataList.Count)];
         }
 
         int roll = Random.Range(0, totalWeight);
         int cumulative = 0;
 
-        foreach (GemData data in gemDataList)
+        foreach (GemData data in filtered)
         {
-            cumulative += data.spawnWeight;
+            int weight = (data.spawnWeight > 0) ? data.spawnWeight : 1;
+            cumulative += weight;
             if (roll < cumulative)
             {
                 return data;
             }
         }
 
-        return gemDataList[gemDataList.Count - 1];
+        return filtered[filtered.Count - 1];
     }
 }

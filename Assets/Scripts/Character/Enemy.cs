@@ -1,5 +1,6 @@
 using System.Collections;
 using UnityEngine;
+using DG.Tweening;
 
 public class Enemy : BaseCharacter
 {
@@ -21,6 +22,13 @@ public class Enemy : BaseCharacter
         yield return new WaitForSeconds(delay);
         HideTargetIndicator();
         PoolingManager.Despawn(gameObject);
+    }
+
+    private void OnDisable()
+    {
+        StopAllCoroutines();
+        transform.DOKill();
+        HideTargetIndicator();
     }
 
     public void ApplyDifficultyMultiplier(float multiplier)

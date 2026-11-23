@@ -392,7 +392,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   gridSize: 7
-  matchThreshold: 2
+  matchThreshold: 3
   spacing: 0.75
   startY: -0.75
   gemSpawner: {fileID: 22158565}
@@ -20083,7 +20083,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   currentState: 0
-  maxActionPoints: 5
+  maxActionPoints: 1
   currentActionPoints: 0
   bgScroller: {fileID: 2102540455}
   gameplayUIManager: {fileID: 1822388728}

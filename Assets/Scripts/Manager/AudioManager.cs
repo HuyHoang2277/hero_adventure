@@ -53,9 +53,15 @@ public class AudioManager : Singleton<AudioManager>
         base.KeepActive(true);
         base.Awake();
 
-        if (_musicSource == null || _soundSource == null)
+        if (_musicSource == null)
         {
-            Debug.LogError("AudioManager: AudioSource chưa được gán trong Inspector!");
+            _musicSource = gameObject.AddComponent<AudioSource>();
+            _musicSource.playOnAwake = false;
+        }
+        if (_soundSource == null)
+        {
+            _soundSource = gameObject.AddComponent<AudioSource>();
+            _soundSource.playOnAwake = false;
         }
     }
 
@@ -226,7 +232,7 @@ public class AudioManager : Singleton<AudioManager>
     public void PlayGemMatch(int matchCount) 
     {
         float pitch = Mathf.Clamp(1.0f + (matchCount - 3) * 0.1f, 1.0f, 1.5f);
-        if (_soundSource != null)
+        if (_soundSource != null && _gemMatchBase != null)
         {
             _soundSource.pitch = pitch;
             _soundSource.PlayOneShot(_gemMatchBase, _soundSource.volume);

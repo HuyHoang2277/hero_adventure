@@ -14,12 +14,18 @@ public class SettingsManager : Singleton<SettingsManager>
 
     private void Start()
     {
-        _settingsUI.Init();
+        if (_settingsUI != null)
+        {
+            _settingsUI.Init();
+        }
     }
 
     public void OpenSettings()
     {
-        _settingsUI.DoOpenSettings();
+        if (_settingsUI != null)
+        {
+            _settingsUI.DoOpenSettings();
+        }
     }
 
     public void SetMusicVolume(float volume)

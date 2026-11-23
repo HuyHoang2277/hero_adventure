@@ -24,4 +24,5 @@ public class MatchEventData
     public GemType GemType;
     public int MatchCount;
     public float PowerValue;
+    public bool IsPlayerMatch = true;
 }
