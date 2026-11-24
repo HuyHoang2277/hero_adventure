@@ -37,10 +37,23 @@ public class LevelModeStrategy : IGameModeStrategy
         List<CharacterInfoSO> selectedEnemies = new List<CharacterInfoSO>();
         
         int safeMaxWaves = Mathf.Max(1, maxWaves);
-        float progress = Mathf.Clamp01((float)currentWave / safeMaxWaves);
-        int targetEnemyCount = Mathf.Clamp(Mathf.CeilToInt(progress * 3f), 1, 3);
-        
-        bool isBossWave = (config != null && config.IsBossLevel && currentWave == safeMaxWaves);
+        int targetEnemyCount;
+        if (safeMaxWaves == 1)
+        {
+            targetEnemyCount = (config != null && config.IsBossLevel) ? 2 : 1;
+        }
+        else if (safeMaxWaves == 2)
+        {
+            // Màn 2 wave (như Level 1): Wave 1 ra 1 quái làm quen, Wave 2 ra 2 quái (hoặc 3 nếu là Boss)
+            targetEnemyCount = (currentWave == 1) ? 1 : ((config != null && config.IsBossLevel) ? 3 : 2);
+        }
+        else
+        {
+            float progress = Mathf.Clamp01((float)(currentWave - 1) / (safeMaxWaves - 1));
+            targetEnemyCount = Mathf.Clamp(Mathf.RoundToInt(Mathf.Lerp(1f, 3f, progress)), 1, 3);
+        }
+
+        bool isBossWave = IsBossWave();
 
         if (isBossWave)
         {
@@ -94,5 +107,33 @@ public class LevelModeStrategy : IGameModeStrategy
     {
         int completedWaves = Mathf.Max(0, currentWave - 1);
         return levelDifficultyMultiplier + completedWaves * waveScalingIncrement;
+    }
+
+    public float GetDamageDifficultyMultiplier()
+    {
+        float hpMult = GetDifficultyMultiplier();
+        return 1f + (hpMult - 1f) * 0.90f;
+    }
+
+    public float GetShieldDifficultyMultiplier()
+    {
+        float hpMult = GetDifficultyMultiplier();
+        return 1f + (hpMult - 1f) * 0.85f;
+    }
+
+    public bool IsBossWave()
+    {
+        int safeMaxWaves = Mathf.Max(1, maxWaves);
+        return config != null && config.IsBossLevel && currentWave == safeMaxWaves;
+    }
+
+    public int GetCompletedWaves()
+    {
+        return Mathf.Max(0, currentWave - 1);
+    }
+
+    public int GetTotalWaves()
+    {
+        return Mathf.Max(1, maxWaves);
     }
 }

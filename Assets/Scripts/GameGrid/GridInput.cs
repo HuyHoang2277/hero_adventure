@@ -35,6 +35,12 @@ public class GridInput : MonoBehaviour
 
         if (InputHelper.GetPointerDown())
         {
+            if (InputHelper.IsPointerOverUI())
+            {
+                DeselectCurrent();
+                return;
+            }
+
             Gem hitGem = GetGemAtPosition(pointerWorldPos);
             if (hitGem != null)
             {

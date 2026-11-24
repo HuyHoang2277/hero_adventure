@@ -45,7 +45,13 @@ public class EnemySelectionManager : MonoBehaviour
         Enemy selectedEnemy = null;
         while (selectedEnemy == null)
         {
-            if (InputHelper.GetPointerDown())
+            if (BattleManager.Instance != null && BattleManager.Instance.CurrentState == GameState.Paused)
+            {
+                yield return null;
+                continue;
+            }
+
+            if (InputHelper.GetPointerDown() && !InputHelper.IsPointerOverUI())
             {
                 Vector3 pointerWorldPos = InputHelper.GetPointerWorldPosition();
 
@@ -75,6 +81,11 @@ public class EnemySelectionManager : MonoBehaviour
 
         _isSelecting = false;
         onSelected?.Invoke(selectedEnemy);
+    }
+
+    private void OnDisable()
+    {
+        _isSelecting = false;
     }
 
     public bool IsSelecting => _isSelecting;

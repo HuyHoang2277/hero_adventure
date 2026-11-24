@@ -16,7 +16,9 @@ public enum EventID
     OnPause,
     OnResume,
     OnEnemyTargetSelectionRequired,
-    OnEnemyTargetSelected
+    OnEnemyTargetSelected,
+    OnResourcesChanged,
+    OnMetaProgressionChanged
 }
 
 public class MatchEventData
@@ -24,5 +26,8 @@ public class MatchEventData
     public GemType GemType;
     public int MatchCount;
     public float PowerValue;
+    public float MaxHealthPercent;
     public bool IsPlayerMatch = true;
+    public bool IsExtraBlast = false;
+    public int CascadeStep = 1;
 }

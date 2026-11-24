@@ -215,28 +215,48 @@ public class DefeatUI : MonoBehaviour
         bool isLevel = GameModeManager.Instance != null &&
                        GameModeManager.Instance.CurrentMode == GameModeType.Level;
 
+        IGameModeStrategy strategy = BattleManager.Instance?.CurrentStrategy;
+        int completedWaves = strategy != null ? strategy.GetCompletedWaves() : 0;
+
         if (isLevel)
         {
+            // Thua ở Wave 1 nhận 0 thưởng (chặn exploit tự sát cày tài nguyên) và không rơi Kim Cương khi thua
+            if (completedWaves <= 0)
+            {
+                return new List<int> { 0, 0, 0 };
+            }
+
             LevelConfig cfg = GameModeManager.Instance?.CurrentLevelConfig;
+            int totalWaves = strategy != null ? strategy.GetTotalWaves() : Mathf.Max(1, cfg?.MaxWaves ?? 3);
+            float progressRatio = Mathf.Clamp01((float)completedWaves / totalWaves) * 0.30f;
+
             return new List<int>
             {
-                Mathf.RoundToInt((cfg?.GoldReward ?? 0) / 10f),
-                Mathf.RoundToInt((cfg?.DiamondReward ?? 0) / 10f),
-                Mathf.RoundToInt((cfg?.ExpReward ?? 0) / 10f)
+                Mathf.RoundToInt((cfg?.GoldReward ?? 0) * progressRatio),
+                0,
+                Mathf.RoundToInt((cfg?.ExpReward ?? 0) * progressRatio)
             };
         }
         else
         {
-            int round = GetEndlessCurrentRound();
-
-            float scale = 1f + (round - 1) * 0.25f;
-
-            return new List<int>
+            int clearedRounds = Mathf.Max(0, GetEndlessCurrentRound() - 1);
+            if (DataManager.Instance != null && DataManager.Instance.GameData != null)
             {
-                Mathf.RoundToInt(baseGoldEndless    * scale),
-                Mathf.RoundToInt(baseDiamondEndless * scale),
-                Mathf.RoundToInt(baseExpEndless     * scale)
-            };
+                DataManager.Instance.GameData.UpdateBestEndlessRound(clearedRounds);
+            }
+
+            // Thua ở Round 1 (chưa vượt qua Round nào) nhận 0 thưởng; thưởng lũy tiến nhẹ + 1 Kim Cương mỗi 5 Round
+            if (clearedRounds <= 0)
+            {
+                return new List<int> { 0, 0, 0 };
+            }
+
+            int gold = Mathf.RoundToInt(Mathf.Max(22, baseGoldEndless * 0.75f) * clearedRounds * (1f + clearedRounds * 0.08f));
+            int diamondPer5Rounds = Mathf.Max(1, baseDiamondEndless);
+            int diamond = (clearedRounds / 5) * diamondPer5Rounds;
+            int exp = Mathf.RoundToInt(Mathf.Max(18, baseExpEndless * 0.9f) * clearedRounds * (1f + clearedRounds * 0.06f));
+
+            return new List<int> { gold, diamond, exp };
         }
     }
 
@@ -256,7 +276,8 @@ public class DefeatUI : MonoBehaviour
     private void OnRetryClicked()
     {
         AudioManager.Instance?.PlaySoundButtonClick();
-        Time.timeScale = 1f;
+        if (BattleManager.Instance != null) BattleManager.Instance.ApplyCurrentTimeScale();
+        else Time.timeScale = 1f;
         Hide();
         BattleManager.Instance?.InitBattle();
     }

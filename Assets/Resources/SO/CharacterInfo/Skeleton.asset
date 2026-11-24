@@ -12,11 +12,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f5d7c8093ca04a54e8868385ec2de9fb, type: 3}
   m_Name: Skeleton
   m_EditorClassIdentifier: 
-  maxHealth: 80
-  baseShield: 10
+  maxHealth: 88
+  baseShield: 5
   baseBlockRate: 5
-  baseDamage: 12
-  baseCritRate: 5
+  baseDamage: 13
+  baseCritRate: 15
   baseCritDamage: 50
   characterAnim: {fileID: 9100000, guid: 8c8cb47de1694bd4cbe24a2e96d269f7, type: 2}
   defaultCharacterSprite: {fileID: 1880692568, guid: 0e09da2ba9e607449abc8370975886e7, type: 3}

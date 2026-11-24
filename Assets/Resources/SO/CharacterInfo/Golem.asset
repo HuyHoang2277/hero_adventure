@@ -12,11 +12,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f5d7c8093ca04a54e8868385ec2de9fb, type: 3}
   m_Name: Golem
   m_EditorClassIdentifier: 
-  maxHealth: 110
-  baseShield: 15
+  maxHealth: 270
+  baseShield: 30
   baseBlockRate: 10
-  baseDamage: 14
-  baseCritRate: 5
+  baseDamage: 21
+  baseCritRate: 10
   baseCritDamage: 50
   characterAnim: {fileID: 9100000, guid: 9a3e6ab488746db46918c87cb9c5e1b5, type: 2}
   defaultCharacterSprite: {fileID: -1330424530, guid: ed7623f0002b8cf468a9d0dcd3a68f2a, type: 3}

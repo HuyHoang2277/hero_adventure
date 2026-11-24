@@ -1,7 +1,43 @@
+using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.EventSystems;
+using UnityEngine.UI;
 
 public static class InputHelper
 {
+    private static readonly List<RaycastResult> uiRaycastResults = new List<RaycastResult>();
+
+    /// <summary>
+    /// Chỉ trả về true khi con trỏ nằm trên một UI tương tác thực sự (Button, Slider, Toggle...),
+    /// tránh bị chặn bởi các ảnh nền Canvas có bật RaycastTarget phía sau lưới ngọc/quái.
+    /// </summary>
+    public static bool IsPointerOverUI()
+    {
+        if (EventSystem.current == null) return false;
+
+        PointerEventData eventData = new PointerEventData(EventSystem.current)
+        {
+            position = GetPointerScreenPosition()
+        };
+
+        uiRaycastResults.Clear();
+        EventSystem.current.RaycastAll(eventData, uiRaycastResults);
+
+        for (int i = 0; i < uiRaycastResults.Count; i++)
+        {
+            GameObject hitObj = uiRaycastResults[i].gameObject;
+            if (hitObj == null) continue;
+
+            Selectable selectable = hitObj.GetComponentInParent<Selectable>();
+            if (selectable != null && selectable.IsActive() && selectable.IsInteractable())
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public static bool GetPointerDown()
     {
 #if UNITY_EDITOR || UNITY_STANDALONE || UNITY_WEBGL

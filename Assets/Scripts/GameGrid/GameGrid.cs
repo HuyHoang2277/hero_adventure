@@ -6,7 +6,7 @@ using DG.Tweening;
 
 public class GameGrid : MonoBehaviour
 {
-    [SerializeField] private int gridSize = 7;
+    [SerializeField] private int gridSize = 8;
     public int GridSize => gridSize;
 
     [SerializeField] private int matchThreshold = 3;
@@ -14,8 +14,8 @@ public class GameGrid : MonoBehaviour
 
     [SerializeField] private int maxCascades = 15;
 
-    [SerializeField] private float spacing = 0.75f;
-    [SerializeField] private float startY = 0f;
+    [SerializeField] private float spacing = 0.66f;
+    [SerializeField] private float startY = -0.65f;
 
     [SerializeField] private GemSpawner gemSpawner;
 
@@ -35,6 +35,13 @@ public class GameGrid : MonoBehaviour
 
     public void Init()
     {
+        if (gridSize <= 7)
+        {
+            gridSize = 8;
+            spacing = 0.66f;
+            startY = -0.65f;
+        }
+
         if (matchThreshold < 3) matchThreshold = 3;
         if (maxCascades < 5) maxCascades = 15;
 
@@ -62,6 +69,21 @@ public class GameGrid : MonoBehaviour
                     }
                 }
             }
+        }
+
+        // Dọn thêm các viên ngọc đang chạy tween thu nhỏ giữa chừng (đã bị gán null khỏi gridGems)
+        List<Gem> strayGems = new List<Gem>();
+        foreach (Transform child in transform)
+        {
+            if (child == null || !child.gameObject.activeInHierarchy) continue;
+            Gem gem = child.GetComponent<Gem>();
+            if (gem != null) strayGems.Add(gem);
+        }
+
+        foreach (Gem gem in strayGems)
+        {
+            gem.transform.DOKill();
+            gemSpawner.DespawnGem(gem);
         }
     }
 
@@ -455,24 +477,7 @@ public class GameGrid : MonoBehaviour
 
             cascadeCount++;
 
-            foreach (List<Gem> group in matches)
-            {
-                GemData gemData = group[0].GetGemData();
-                ObserverManager<EventID>.PostEvent(EventID.OnGemsMatched, new MatchEventData
-                {
-                    GemType = gemData.gemType,
-                    MatchCount = group.Count,
-                    PowerValue = gemData.powerValue,
-                    IsPlayerMatch = isPlayer
-                });
-
-                if (AudioManager.Instance != null)
-                {
-                    AudioManager.Instance.PlayGemMatch(group.Count);
-                }
-            }
-
-            // Despawn matched gems
+            // 1. Gather all matched gems
             HashSet<Gem> allMatchedGems = new HashSet<Gem>();
             foreach (var group in matches)
             {
@@ -482,8 +487,82 @@ public class GameGrid : MonoBehaviour
                 }
             }
 
+            // 2. Identify special blasts (Match 4: Row/Col sweep, Match 5+: 3x3 Area blast)
+            HashSet<Gem> extraBlastedGems = new HashSet<Gem>();
+            ProcessSpecialExplosions(matches, allMatchedGems, extraBlastedGems);
+
+            // 3. Post events for standard matched groups
+            foreach (List<Gem> group in matches)
+            {
+                GemData gemData = group[0].GetGemData();
+                ObserverManager<EventID>.PostEvent(EventID.OnGemsMatched, new MatchEventData
+                {
+                    GemType = gemData.gemType,
+                    MatchCount = group.Count,
+                    PowerValue = gemData.powerValue,
+                    MaxHealthPercent = gemData.maxHealthPercent,
+                    IsPlayerMatch = isPlayer,
+                    IsExtraBlast = false,
+                    CascadeStep = cascadeCount
+                });
+
+                if (AudioManager.Instance != null)
+                {
+                    AudioManager.Instance.PlayGemMatch(group.Count, cascadeCount);
+                }
+            }
+
+            // 4. Post events for extra blasted gems (mỗi viên lẻ tính hệ số giảm tải và không cộng dồn Combo)
+            foreach (Gem gem in extraBlastedGems)
+            {
+                GemData gemData = gem.GetGemData();
+                if (gemData != null)
+                {
+                    ObserverManager<EventID>.PostEvent(EventID.OnGemsMatched, new MatchEventData
+                    {
+                        GemType = gemData.gemType,
+                        MatchCount = 1,
+                        PowerValue = gemData.powerValue,
+                        MaxHealthPercent = gemData.maxHealthPercent,
+                        IsPlayerMatch = isPlayer,
+                        IsExtraBlast = true,
+                        CascadeStep = cascadeCount
+                    });
+                }
+            }
+
+            // 5. Audio, Screen Shake, Hit-Stop & Haptics for explosions
+            if (extraBlastedGems.Count > 0)
+            {
+                if (Camera.main != null)
+                {
+                    Camera.main.transform.DOKill();
+                    Camera.main.transform.DOShakePosition(0.25f, 0.25f, 20);
+                }
+                if (AudioManager.Instance != null)
+                {
+                    AudioManager.Instance.PlayAttackCritSwing();
+                }
+                if (extraBlastedGems.Count >= 6)
+                {
+                    CombatVFXManager.Instance?.TriggerHitStop(0.05f);
+                    CombatVFXManager.Instance?.TriggerHaptic(45);
+                }
+                else
+                {
+                    CombatVFXManager.Instance?.TriggerHaptic(25);
+                }
+            }
+
+            // 6. Despawn matched gems + 2D Particle Burst theo màu ngọc
             foreach (Gem gem in allMatchedGems)
             {
+                GemData gemData = gem.GetGemData();
+                if (gemData != null)
+                {
+                    CombatVFXManager.Instance?.PlayGemBurst(gem.transform.position, gemData.lineColor, 10);
+                }
+
                 gridGems[gem.gridPosition.x, gem.gridPosition.y] = null;
                 gem.transform.DOKill();
                 Gem captured = gem;
@@ -493,9 +572,30 @@ public class GameGrid : MonoBehaviour
                 });
             }
 
-            yield return new WaitForSeconds(0.25f);
+            // 7. Despawn extra blasted gems with punch animation + 2D Particle Burst
+            foreach (Gem gem in extraBlastedGems)
+            {
+                GemData gemData = gem.GetGemData();
+                if (gemData != null)
+                {
+                    CombatVFXManager.Instance?.PlayGemBurst(gem.transform.position, gemData.lineColor, 8);
+                }
 
-            // Drop existing gems and spawn new gems from top
+                gridGems[gem.gridPosition.x, gem.gridPosition.y] = null;
+                gem.transform.DOKill();
+                Gem captured = gem;
+                captured.transform.DOPunchScale(Vector3.one * 0.35f, 0.12f, 10, 1).OnComplete(() =>
+                {
+                    captured.transform.DOScale(Vector3.zero, 0.15f).SetEase(Ease.InBack).OnComplete(() =>
+                    {
+                        gemSpawner.DespawnGem(captured);
+                    });
+                });
+            }
+
+            yield return new WaitForSeconds(0.3f);
+
+            // 8. Drop existing gems and spawn new gems from top (cascades naturally allowed)
             yield return StartCoroutine(DropAndFillRoutine());
 
             yield return new WaitForSeconds(0.35f);
@@ -529,6 +629,140 @@ public class GameGrid : MonoBehaviour
         BattleManager.Instance?.OnGridTurnCompleted(isPlayer);
     }
 
+    private void ProcessSpecialExplosions(List<List<Gem>> matches, HashSet<Gem> allMatchedGems, HashSet<Gem> extraBlastedGems)
+    {
+        foreach (List<Gem> group in matches)
+        {
+            if (group == null || group.Count < 4) continue;
+
+            if (group.Count == 4)
+            {
+                int minY = int.MaxValue, maxY = int.MinValue;
+                int minX = int.MaxValue, maxX = int.MinValue;
+                foreach (Gem g in group)
+                {
+                    if (g.gridPosition.y < minY) minY = g.gridPosition.y;
+                    if (g.gridPosition.y > maxY) maxY = g.gridPosition.y;
+                    if (g.gridPosition.x < minX) minX = g.gridPosition.x;
+                    if (g.gridPosition.x > maxX) maxX = g.gridPosition.x;
+                }
+
+                if (minY == maxY)
+                {
+                    // Horizontal Match 4: Explode entire row!
+                    int row = minY;
+                    for (int x = 0; x < gridSize; x++)
+                    {
+                        Gem gem = gridGems[x, row];
+                        if (gem != null && !allMatchedGems.Contains(gem))
+                        {
+                            extraBlastedGems.Add(gem);
+                        }
+                    }
+                }
+                else if (minX == maxX)
+                {
+                    // Vertical Match 4: Explode entire column!
+                    int col = minX;
+                    for (int y = 0; y < gridSize; y++)
+                    {
+                        Gem gem = gridGems[col, y];
+                        if (gem != null && !allMatchedGems.Contains(gem))
+                        {
+                            extraBlastedGems.Add(gem);
+                        }
+                    }
+                }
+                else
+                {
+                    TriggerAreaBlast(group, allMatchedGems, extraBlastedGems);
+                }
+            }
+            else // group.Count >= 5
+            {
+                // Match 5+ (thẳng 5+, hình L, T, +): Nổ chữ thập quét cả hàng và cột qua giao điểm/tâm!
+                TriggerCrossBlast(group, allMatchedGems, extraBlastedGems);
+            }
+        }
+    }
+
+    private void TriggerCrossBlast(List<Gem> group, HashSet<Gem> allMatchedGems, HashSet<Gem> extraBlastedGems)
+    {
+        HashSet<Vector2Int> positions = new HashSet<Vector2Int>();
+        int sumX = 0, sumY = 0;
+        foreach (Gem g in group)
+        {
+            positions.Add(g.gridPosition);
+            sumX += g.gridPosition.x;
+            sumY += g.gridPosition.y;
+        }
+
+        int centerX = Mathf.Clamp(Mathf.RoundToInt((float)sumX / group.Count), 0, gridSize - 1);
+        int centerY = Mathf.Clamp(Mathf.RoundToInt((float)sumY / group.Count), 0, gridSize - 1);
+
+        // Ưu tiên chọn ô giao điểm (L, T, +) để tia nổ quét trọn cả 2 trục
+        foreach (Gem g in group)
+        {
+            Vector2Int p = g.gridPosition;
+            bool hasHorizontal = positions.Contains(new Vector2Int(p.x - 1, p.y)) || positions.Contains(new Vector2Int(p.x + 1, p.y));
+            bool hasVertical = positions.Contains(new Vector2Int(p.x, p.y - 1)) || positions.Contains(new Vector2Int(p.x, p.y + 1));
+            if (hasHorizontal && hasVertical)
+            {
+                centerX = p.x;
+                centerY = p.y;
+                break;
+            }
+        }
+
+        for (int x = 0; x < gridSize; x++)
+        {
+            Gem gem = gridGems[x, centerY];
+            if (gem != null && !allMatchedGems.Contains(gem))
+            {
+                extraBlastedGems.Add(gem);
+            }
+        }
+
+        for (int y = 0; y < gridSize; y++)
+        {
+            Gem gem = gridGems[centerX, y];
+            if (gem != null && !allMatchedGems.Contains(gem))
+            {
+                extraBlastedGems.Add(gem);
+            }
+        }
+    }
+
+    private void TriggerAreaBlast(List<Gem> group, HashSet<Gem> allMatchedGems, HashSet<Gem> extraBlastedGems)
+    {
+        int sumX = 0, sumY = 0;
+        foreach (Gem g in group)
+        {
+            sumX += g.gridPosition.x;
+            sumY += g.gridPosition.y;
+        }
+        int centerX = Mathf.RoundToInt((float)sumX / group.Count);
+        int centerY = Mathf.RoundToInt((float)sumY / group.Count);
+
+        for (int dx = -1; dx <= 1; dx++)
+        {
+            for (int dy = -1; dy <= 1; dy++)
+            {
+                int targetX = centerX + dx;
+                int targetY = centerY + dy;
+
+                if (targetX >= 0 && targetX < gridSize && targetY >= 0 && targetY < gridSize)
+                {
+                    Gem gem = gridGems[targetX, targetY];
+                    if (gem != null && !allMatchedGems.Contains(gem))
+                    {
+                        extraBlastedGems.Add(gem);
+                    }
+                }
+            }
+        }
+    }
+
     private IEnumerator DropAndFillRoutine()
     {
         for (int x = 0; x < gridSize; x++)
@@ -560,30 +794,11 @@ public class GameGrid : MonoBehaviour
                 Vector2 spawnPos = GetWorldPosition(x, -(y + 1));
                 Vector2 finalPos = GetWorldPosition(x, targetY);
 
-                List<GemType> excluded = new List<GemType>();
-
-                // Avoid horizontal match-3 with left neighbors
-                if (x >= 2 && gridGems[x - 1, targetY] != null && gridGems[x - 2, targetY] != null
-                    && gridGems[x - 1, targetY].GetGemData() != null && gridGems[x - 2, targetY].GetGemData() != null
-                    && gridGems[x - 1, targetY].GetGemData().gemType == gridGems[x - 2, targetY].GetGemData().gemType)
-                {
-                    excluded.Add(gridGems[x - 1, targetY].GetGemData().gemType);
-                }
-
-                // Avoid vertical match-3 with bottom neighbors
-                if (targetY + 2 < gridSize && gridGems[x, targetY + 1] != null && gridGems[x, targetY + 2] != null
-                    && gridGems[x, targetY + 1].GetGemData() != null && gridGems[x, targetY + 2].GetGemData() != null
-                    && gridGems[x, targetY + 1].GetGemData().gemType == gridGems[x, targetY + 2].GetGemData().gemType)
-                {
-                    excluded.Add(gridGems[x, targetY + 1].GetGemData().gemType);
-                }
-
                 Gem newGem = gemSpawner.SpawnGem(spawnPos, this.transform);
                 if (newGem != null)
                 {
-                    GemData data = (excluded.Count > 0)
-                        ? gemSpawner.GetRandomGemDataExcept(excluded)
-                        : gemSpawner.GetRandomGemData();
+                    // Allow natural cascades: spawn randomly by weight without blocking matches
+                    GemData data = gemSpawner.GetRandomGemData();
 
                     newGem.Init(data, new Vector2Int(x, targetY));
                     gridGems[x, targetY] = newGem;

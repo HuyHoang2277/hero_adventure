@@ -9,4 +9,9 @@ public interface IGameModeStrategy
     IEnumerator OnWaveCleared(BattleManager battleManager);
     bool IsGameOver(Player player);
     float GetDifficultyMultiplier();
+    float GetDamageDifficultyMultiplier();
+    float GetShieldDifficultyMultiplier();
+    bool IsBossWave();
+    int GetCompletedWaves();
+    int GetTotalWaves();
 }

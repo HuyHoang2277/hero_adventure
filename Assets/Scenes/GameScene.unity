@@ -391,10 +391,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c30843288a0ef424b80a80a4bc6bfd8e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  gridSize: 7
+  gridSize: 8
   matchThreshold: 3
-  spacing: 0.732
-  startY: -0.794
+  spacing: 0.66
+  startY: -0.65
   gemSpawner: {fileID: 22158565}
 --- !u!114 &22158565
 MonoBehaviour:

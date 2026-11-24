@@ -20,6 +20,10 @@ public class GemData : ScriptableObject
     public Color lineColor;
     public float powerValue;
 
+    [Tooltip("Tỉ lệ cộng thêm theo MaxHealth (vd: 0.08 = 8% MaxHP). Áp dụng cho Health và Shield.")]
+    [Range(0f, 0.5f)]
+    public float maxHealthPercent = 0f;
+
     [Header("Spawn Settings")]
     [Range(1, 10)]
     public int spawnWeight = 1;

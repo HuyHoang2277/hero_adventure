@@ -37,6 +37,10 @@ public class NavigationManager : MonoBehaviour
     [SerializeField] private Button popupOkBtn;
 
     private NavigationTabItem currentTabItem;
+    private ShopTabController shopController;
+    private EquipmentTabController equipmentController;
+    private TalentTabController talentController;
+    private RewardTabController rewardController;
 
     public void InitializeNavigation()
     {
@@ -45,7 +49,11 @@ public class NavigationManager : MonoBehaviour
 
     private IEnumerator InitRoutine()
     {
-        if (popupOkBtn != null) popupOkBtn.onClick.AddListener(HideComingSoonPopup);
+        if (popupOkBtn != null)
+        {
+            popupOkBtn.onClick.RemoveListener(HideComingSoonPopup);
+            popupOkBtn.onClick.AddListener(HideComingSoonPopup);
+        }
         if (inProgressPopupObj != null) inProgressPopupObj.SetActive(false);
         if (inProgresspopupPanel != null) inProgresspopupPanel.localScale = Vector3.zero;
 
@@ -54,13 +62,63 @@ public class NavigationManager : MonoBehaviour
             if (tab.tabButton != null)
             {
                 MenuTab type = tab.tabType;
+                tab.tabButton.onClick.RemoveAllListeners();
                 tab.tabButton.onClick.AddListener(() => SwitchTab(type));
+            }
+        }
+
+        foreach (var tab in tabs)
+        {
+            try
+            {
+                SetupTabController(tab);
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogError($"[NavigationManager] Lỗi khởi tạo tab {tab.tabType}: {ex}");
             }
         }
         
         yield return new WaitForEndOfFrame();
 
         SwitchTab(MenuTab.Battle, false);
+    }
+
+    private void SetupTabController(NavigationTabItem tab)
+    {
+        if (tab == null || tab.tabPanel == null) return;
+
+        switch (tab.tabType)
+        {
+            case MenuTab.Shop:
+                shopController = tab.tabPanel.GetComponent<ShopTabController>() ?? tab.tabPanel.AddComponent<ShopTabController>();
+                shopController.Initialize();
+                break;
+            case MenuTab.Equipment:
+                equipmentController = tab.tabPanel.GetComponent<EquipmentTabController>() ?? tab.tabPanel.AddComponent<EquipmentTabController>();
+                equipmentController.Initialize();
+                break;
+            case MenuTab.Talent:
+                talentController = tab.tabPanel.GetComponent<TalentTabController>() ?? tab.tabPanel.AddComponent<TalentTabController>();
+                talentController.Initialize();
+                break;
+            case MenuTab.Reward:
+                rewardController = tab.tabPanel.GetComponent<RewardTabController>() ?? tab.tabPanel.AddComponent<RewardTabController>();
+                rewardController.Initialize();
+                break;
+        }
+    }
+
+    private void RefreshTabContent(MenuTab targetTab)
+    {
+        GameSceneManager.Instance?.RefreshTopBar();
+        switch (targetTab)
+        {
+            case MenuTab.Shop: shopController?.Refresh(); break;
+            case MenuTab.Equipment: equipmentController?.Refresh(); break;
+            case MenuTab.Talent: talentController?.Refresh(); break;
+            case MenuTab.Reward: rewardController?.Refresh(); break;
+        }
     }
 
     private void OnDestroy()
@@ -85,6 +143,7 @@ public class NavigationManager : MonoBehaviour
 
         if (currentTabItem != null && currentTabItem.tabPanel != null)
         {
+            MetaUIHelper.HideToast(currentTabItem.tabPanel.transform);
             currentTabItem.tabPanel.SetActive(false);
         }
 
@@ -133,10 +192,7 @@ public class NavigationManager : MonoBehaviour
             }
         }
 
-        if (animateHighlight && targetTab != MenuTab.Battle)
-        {
-            ShowComingSoonPopup();
-        }
+        RefreshTabContent(targetTab);
     }
 
     private void ShowComingSoonPopup()

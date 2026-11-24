@@ -7,9 +7,90 @@ public class Enemy : BaseCharacter
     [Header("Target Indicator")]
     [SerializeField] private SpriteRenderer targetIndicator;
 
+    private CharacterWorldHUD worldHUD;
+    private int maxSupportCooldown = 2;
+    private int currentSupportCooldown = 2;
+    private bool isActingNext = false;
+
+    public int SupportCooldown => currentSupportCooldown;
+    public bool IsActingNext => isActingNext;
+
+    public override void InitStat(CharacterInfoSO statData = null)
+    {
+        EnsureWorldHUD();
+        base.InitStat(statData);
+    }
+
+    private void EnsureWorldHUD()
+    {
+        if (worldHUD == null)
+        {
+            worldHUD = GetComponent<CharacterWorldHUD>();
+            if (worldHUD == null) worldHUD = gameObject.AddComponent<CharacterWorldHUD>();
+        }
+        worldHUD.Initialize(true);
+    }
+
+    public void InitializeIntent(int initialCooldown, int maxCooldown, bool actingNext)
+    {
+        maxSupportCooldown = Mathf.Max(1, maxCooldown);
+        currentSupportCooldown = Mathf.Max(1, initialCooldown);
+        isActingNext = actingNext;
+        EnsureWorldHUD();
+        worldHUD.UpdateIntent(isActingNext, currentSupportCooldown);
+    }
+
+    public void SetActingNext(bool actingNext)
+    {
+        isActingNext = actingNext;
+        if (worldHUD != null)
+        {
+            worldHUD.UpdateIntent(isActingNext, currentSupportCooldown);
+        }
+    }
+
+    public void ResetSupportCooldown()
+    {
+        currentSupportCooldown = maxSupportCooldown;
+        if (worldHUD != null)
+        {
+            worldHUD.UpdateIntent(isActingNext, currentSupportCooldown);
+        }
+    }
+
+    /// <summary>
+    /// Giảm hồi chiêu đánh phụ của quái hỗ trợ. Trả về true nếu sẵn sàng tung đòn đánh phụ trong lượt này.
+    /// </summary>
+    public bool TickSupportCooldown()
+    {
+        currentSupportCooldown--;
+        if (currentSupportCooldown <= 0)
+        {
+            currentSupportCooldown = maxSupportCooldown;
+            if (worldHUD != null) worldHUD.UpdateIntent(isActingNext, currentSupportCooldown);
+            return true;
+        }
+
+        if (worldHUD != null) worldHUD.UpdateIntent(isActingNext, currentSupportCooldown);
+        return false;
+    }
+
     public override void BroadcastUIUpdate()
     {
-        BattleManager.Instance.GameplayUIManager.RefreshEnemyHP(this);
+        if (worldHUD != null)
+        {
+            worldHUD.RefreshStats(currentHealth, currentMaxHealth, currentShield);
+        }
+        if (BattleManager.Instance != null && BattleManager.Instance.GameplayUIManager != null)
+        {
+            BattleManager.Instance.GameplayUIManager.RefreshEnemyHP(this);
+        }
+    }
+
+    protected override void Die()
+    {
+        if (worldHUD != null) worldHUD.SetVisible(false);
+        base.Die();
     }
 
     protected override void DestroyOrDespawn()
@@ -29,14 +110,28 @@ public class Enemy : BaseCharacter
         StopAllCoroutines();
         transform.DOKill();
         HideTargetIndicator();
+        if (worldHUD != null) worldHUD.SetVisible(false);
+    }
+
+    protected override void SyncOriginalPosition()
+    {
+        // Quái tái sử dụng từ Object Pool luôn cập nhật vị trí gốc theo spawnPoint mới
+        initialSpawnPosition = transform.position;
+        hasRecordedInitialPos = true;
+        originalPosition = transform.position;
     }
 
     public void ApplyDifficultyMultiplier(float multiplier)
     {
-        currentMaxHealth = RoundStat(currentMaxHealth * multiplier);
+        ApplyDifficultyMultiplier(multiplier, multiplier, multiplier);
+    }
+
+    public void ApplyDifficultyMultiplier(float hpMultiplier, float damageMultiplier, float shieldMultiplier)
+    {
+        currentMaxHealth = RoundStat(currentMaxHealth * hpMultiplier);
         currentHealth = currentMaxHealth;
-        currentDamage = RoundStat(currentDamage * multiplier);
-        currentShield = RoundStat(currentShield * multiplier);
+        currentDamage = RoundStat(currentDamage * damageMultiplier);
+        currentShield = RoundStat(currentShield * shieldMultiplier);
 
         BroadcastUIUpdate();
     }

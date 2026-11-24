@@ -22,10 +22,10 @@ MonoBehaviour:
   - HP > 30%
   - HP > 60%
   levelDifficultyMultiplier: 1
-  waveScalingIncrement: 0.02
+  waveScalingIncrement: 0.05
   PossibleEnemies:
   - {fileID: 11400000, guid: 3678d96dfa1858f45916931e654f01f7, type: 2}
   BossEnemy: {fileID: 0}
-  GoldReward: 30
-  DiamondReward: 1
-  ExpReward: 30
+  GoldReward: 50
+  DiamondReward: 2
+  ExpReward: 100

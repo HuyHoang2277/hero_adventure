@@ -173,10 +173,17 @@ public class VictoryUI : MonoBehaviour
         bool isLevel = GameModeManager.Instance != null &&
                        GameModeManager.Instance.CurrentMode == GameModeType.Level;
 
+        int previousStars = 0;
+        int starsToShow = 1;
+
         if (isLevel && starPrefab != null && starsContainer != null)
         {
             LevelConfig cfg = GameModeManager.Instance?.CurrentLevelConfig;
-            int starsToShow = CalculateStars(player, cfg);
+            if (cfg != null && DataManager.Instance != null && DataManager.Instance.GameData != null)
+            {
+                previousStars = DataManager.Instance.GameData.GetLevelStar(cfg.LevelID - 1);
+            }
+            starsToShow = CalculateStars(player, cfg);
 
             int totalStars = 3;
             if (cfg != null && cfg.starConditionTexts != null)
@@ -220,7 +227,7 @@ public class VictoryUI : MonoBehaviour
 
         if (chestRewardImg != null) chestRewardImg.gameObject.SetActive(false);
 
-        List<int> amounts = rewardOverrides ?? BuildRewardAmounts(isLevel);
+        List<int> amounts = rewardOverrides ?? BuildRewardAmounts(isLevel, previousStars, starsToShow);
 
         if (DataManager.Instance != null && amounts.Count >= 3)
         {
@@ -293,7 +300,7 @@ public class VictoryUI : MonoBehaviour
         return 1;
     }
 
-    private List<int> BuildRewardAmounts(bool isLevel)
+    private List<int> BuildRewardAmounts(bool isLevel, int previousStars = 0, int earnedStars = 1)
     {
         if (isLevel)
         {
@@ -306,11 +313,17 @@ public class VictoryUI : MonoBehaviour
 
             if (alreadyCleared)
             {
+                // Chơi lại màn cũ nhận 35% Gold & EXP; nếu nâng số Sao thì thưởng bù Kim Cương
+                int starGain = Mathf.Max(0, earnedStars - previousStars);
+                int bonusDiamond = starGain > 0
+                    ? Mathf.Max(starGain, Mathf.RoundToInt((cfg?.DiamondReward ?? 0) * 0.35f * starGain))
+                    : 0;
+
                 return new List<int>
                 {
-                    Mathf.RoundToInt((cfg?.GoldReward ?? 0) / 10f),
-                    Mathf.RoundToInt((cfg?.DiamondReward ?? 0) / 10f),
-                    Mathf.RoundToInt((cfg?.ExpReward ?? 0) / 10f)
+                    Mathf.RoundToInt((cfg?.GoldReward ?? 0) * 0.35f),
+                    bonusDiamond,
+                    Mathf.RoundToInt((cfg?.ExpReward ?? 0) * 0.35f)
                 };
             }
             else
@@ -325,14 +338,14 @@ public class VictoryUI : MonoBehaviour
         }
         else
         {
-            int round = GetEndlessCurrentRound();
-            float scale = 1f + (round - 1) * 0.25f;
+            int clearedRounds = Mathf.Max(0, GetEndlessCurrentRound() - 1);
+            if (clearedRounds <= 0) return new List<int> { 0, 0, 0 };
 
             return new List<int>
             {
-                Mathf.RoundToInt(baseGoldEndless    * scale),
-                Mathf.RoundToInt(baseDiamondEndless * scale),
-                Mathf.RoundToInt(baseExpEndless     * scale)
+                Mathf.RoundToInt(baseGoldEndless * clearedRounds * 0.5f),
+                Mathf.Max(1, baseDiamondEndless) * (clearedRounds / 5),
+                Mathf.RoundToInt(baseExpEndless * clearedRounds * 0.5f)
             };
         }
     }
@@ -353,7 +366,8 @@ public class VictoryUI : MonoBehaviour
     private void OnNextLevelClicked()
     {
         AudioManager.Instance?.PlaySoundButtonClick();
-        Time.timeScale = 1f;
+        if (BattleManager.Instance != null) BattleManager.Instance.ApplyCurrentTimeScale();
+        else Time.timeScale = 1f;
         Hide();
 
         bool isLevel = GameModeManager.Instance != null && GameModeManager.Instance.CurrentMode == GameModeType.Level;

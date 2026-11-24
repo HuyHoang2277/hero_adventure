@@ -14,19 +14,19 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   LevelID: 2
   IsBossLevel: 0
-  MaxWaves: 3
-  twoStarHPThreshold: 30
-  threeStarHPThreshold: 60
+  MaxWaves: 2
+  twoStarHPThreshold: 35
+  threeStarHPThreshold: 65
   starConditionTexts:
   - Win Level
-  - HP > 30%
-  - HP > 60%
-  levelDifficultyMultiplier: 1.1
-  waveScalingIncrement: 0.03
+  - HP > 35%
+  - HP > 65%
+  levelDifficultyMultiplier: 1.05
+  waveScalingIncrement: 0.05
   PossibleEnemies:
   - {fileID: 11400000, guid: 1b71392e57474964e973e039ed37a8ee, type: 2}
   - {fileID: 11400000, guid: 3678d96dfa1858f45916931e654f01f7, type: 2}
   BossEnemy: {fileID: 0}
-  GoldReward: 30
-  DiamondReward: 1
-  ExpReward: 50
+  GoldReward: 75
+  DiamondReward: 3
+  ExpReward: 120

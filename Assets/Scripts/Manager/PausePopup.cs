@@ -16,11 +16,25 @@ public class PausePopup : MonoBehaviour
 
     public void Init()
     {
-        if (resumeButton != null) resumeButton.onClick.AddListener(OnResumeClicked);
-        if (settingsButton != null) settingsButton.onClick.AddListener(OnSettingsClicked);
-        if (mainMenuButton != null) mainMenuButton.onClick.AddListener(OnMainMenuClicked);
+        if (resumeButton != null)
+        {
+            resumeButton.onClick.RemoveListener(OnResumeClicked);
+            resumeButton.onClick.AddListener(OnResumeClicked);
+        }
+        if (settingsButton != null)
+        {
+            settingsButton.onClick.RemoveListener(OnSettingsClicked);
+            settingsButton.onClick.AddListener(OnSettingsClicked);
+        }
+        if (mainMenuButton != null)
+        {
+            mainMenuButton.onClick.RemoveListener(OnMainMenuClicked);
+            mainMenuButton.onClick.AddListener(OnMainMenuClicked);
+        }
 
+        if (popupContentTransform != null) popupContentTransform.DOKill();
         if (popupContentObj != null) popupContentObj.SetActive(false);
+        if (backgroundDim != null) backgroundDim.gameObject.SetActive(false);
     }
 
     private void OnEnable()
@@ -80,7 +94,8 @@ public class PausePopup : MonoBehaviour
             {
                 if (popupContentObj != null) popupContentObj.SetActive(false);
                 if (backgroundDim != null) backgroundDim.gameObject.SetActive(false);
-                Time.timeScale = 1f;
+                if (BattleManager.Instance != null) BattleManager.Instance.ApplyCurrentTimeScale();
+                else Time.timeScale = 1f;
             });
     }
 

@@ -36,6 +36,30 @@ public class GameSceneManager : Singleton<GameSceneManager>
     [SerializeField] private Sprite lockedBossLevelSprite;
     [SerializeField] private Sprite unlockedBossLevelSprite;
     
+    public TMP_FontAsset MenuDefaultFont => topBarGoldText != null ? topBarGoldText.font : TMP_Settings.defaultFontAsset;
+
+    private void OnEnable()
+    {
+        ObserverManager<EventID>.AddRegisterEvent(EventID.OnResourcesChanged, HandleDataUpdated);
+        ObserverManager<EventID>.AddRegisterEvent(EventID.OnMetaProgressionChanged, HandleDataUpdated);
+    }
+
+    private void OnDisable()
+    {
+        ObserverManager<EventID>.RemoveAddListener(EventID.OnResourcesChanged, HandleDataUpdated);
+        ObserverManager<EventID>.RemoveAddListener(EventID.OnMetaProgressionChanged, HandleDataUpdated);
+    }
+
+    private void HandleDataUpdated(object param)
+    {
+        UpdateTopBar();
+    }
+
+    public void RefreshTopBar()
+    {
+        UpdateTopBar();
+    }
+
     public void Start()
     {
         ShowMainMenu();
@@ -65,6 +89,7 @@ public class GameSceneManager : Singleton<GameSceneManager>
 
     public void ShowMainMenu()
     {
+        Time.timeScale = 1f;
         BattleManager.Instance?.CleanupBattle();
         AudioManager.Instance?.PlayMusicInMenu();
         UpdateTopBar();

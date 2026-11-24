@@ -21,8 +21,8 @@ MonoBehaviour:
   - Win Level
   - HP > 40%
   - HP > 70%
-  levelDifficultyMultiplier: 1.2
-  waveScalingIncrement: 0.04
+  levelDifficultyMultiplier: 1.15
+  waveScalingIncrement: 0.05
   PossibleEnemies:
   - {fileID: 11400000, guid: 1b71392e57474964e973e039ed37a8ee, type: 2}
   - {fileID: 11400000, guid: 6df6eb6f0b2846f4da89a8e0b9492a43, type: 2}

@@ -16,16 +16,15 @@ MonoBehaviour:
   IsBossLevel: 0
   MaxWaves: 3
   twoStarHPThreshold: 40
-  threeStarHPThreshold: 75
+  threeStarHPThreshold: 70
   starConditionTexts:
   - Win Level
   - HP > 40%
-  - HP > 75%
+  - HP > 70%
   levelDifficultyMultiplier: 1.35
-  waveScalingIncrement: 0.05
+  waveScalingIncrement: 0.07
   PossibleEnemies:
   - {fileID: 11400000, guid: 6df6eb6f0b2846f4da89a8e0b9492a43, type: 2}
-  - {fileID: 11400000, guid: 3678d96dfa1858f45916931e654f01f7, type: 2}
   - {fileID: 11400000, guid: 1b71392e57474964e973e039ed37a8ee, type: 2}
   BossEnemy: {fileID: 0}
   GoldReward: 100
