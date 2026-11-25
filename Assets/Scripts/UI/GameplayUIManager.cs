@@ -631,6 +631,13 @@ public class GameplayUIManager : MonoBehaviour
         if (nextActive)
         {
             quickGuideModalObj.transform.SetAsLastSibling();
+            Transform card = quickGuideModalObj.transform.Find("GuideCard");
+            if (card != null)
+            {
+                card.DOKill();
+                card.localScale = Vector3.one * 0.86f;
+                card.DOScale(1f, 0.22f).SetEase(Ease.OutBack).SetUpdate(true);
+            }
         }
     }
 
@@ -642,6 +649,35 @@ public class GameplayUIManager : MonoBehaviour
         }
     }
 
+    private Dictionary<GemType, Sprite> LoadGemSpritesMap()
+    {
+        var map = new Dictionary<GemType, Sprite>();
+        GemData[] allGems = Resources.LoadAll<GemData>("SO/GemInfo");
+        if (allGems != null)
+        {
+            foreach (var gd in allGems)
+            {
+                if (gd != null && gd.gemSprite != null)
+                {
+                    map[gd.gemType] = gd.gemSprite;
+                }
+            }
+        }
+        return map;
+    }
+
+    private Sprite FindScrollHeaderSprite()
+    {
+        // Reuse the ornate red-gold scroll sprite from BackUI > StatBG if present in scene
+        GameObject statBg = GameObject.Find("StatBG");
+        if (statBg != null)
+        {
+            UnityEngine.UI.Image img = statBg.GetComponent<UnityEngine.UI.Image>();
+            if (img != null && img.sprite != null) return img.sprite;
+        }
+        return null;
+    }
+
     private void EnsureQuickGuideModal()
     {
         if (quickGuideModalObj != null) return;
@@ -649,11 +685,13 @@ public class GameplayUIManager : MonoBehaviour
         Transform existing = transform.Find("QuickGuideModal");
         if (existing != null)
         {
-            quickGuideModalObj = existing.gameObject;
-            return;
+            Destroy(existing.gameObject);
         }
 
-        UnityEngine.UI.Image backdrop = MetaUIHelper.CreatePanel(transform, "QuickGuideModal", new Color(0.04f, 0.04f, 0.06f, 0.84f), true);
+        Dictionary<GemType, Sprite> gemSprites = LoadGemSpritesMap();
+        Sprite headerScrollSprite = FindScrollHeaderSprite();
+
+        UnityEngine.UI.Image backdrop = MetaUIHelper.CreatePanel(transform, "QuickGuideModal", new Color(0.03f, 0.03f, 0.05f, 0.86f), true);
         RectTransform bgRt = backdrop.rectTransform;
         bgRt.anchorMin = Vector2.zero;
         bgRt.anchorMax = Vector2.one;
@@ -664,79 +702,350 @@ public class GameplayUIManager : MonoBehaviour
         bgCloseBtn.transition = Selectable.Transition.None;
         bgCloseBtn.onClick.AddListener(CloseQuickGuideModal);
 
+        // Main outer board frame (Crimson-Gold Dark Ink)
         RectTransform cardRt = MetaUIHelper.CreateFramedCard(
             backdrop.transform,
             "GuideCard",
-            new Color(0.10f, 0.10f, 0.13f, 0.98f),
-            new Color(0.82f, 0.64f, 0.28f, 0.95f),
+            new Color(0.09f, 0.09f, 0.12f, 0.98f),
+            new Color(0.78f, 0.58f, 0.24f, 0.96f),
             4f);
         cardRt.anchorMin = new Vector2(0.5f, 0.5f);
         cardRt.anchorMax = new Vector2(0.5f, 0.5f);
         cardRt.pivot = new Vector2(0.5f, 0.5f);
-        cardRt.sizeDelta = new Vector2(880f, 940f);
-        cardRt.anchoredPosition = Vector2.zero;
+        cardRt.sizeDelta = new Vector2(940f, 1020f);
+        cardRt.anchoredPosition = new Vector2(0f, -10f);
 
-        Transform fill = cardRt.Find("Fill");
-        Transform contentRoot = fill != null ? fill : cardRt;
+        // Block click-through on card body so tapping inside doesn't close accidentally
+        UnityEngine.UI.Image cardBlocker = cardRt.GetComponent<UnityEngine.UI.Image>();
+        if (cardBlocker != null) cardBlocker.raycastTarget = true;
+
+        // Inner crimson accent border
+        RectTransform innerTrim = MetaUIHelper.CreateFramedCard(
+            cardRt,
+            "CrimsonInnerTrim",
+            new Color(0.10f, 0.10f, 0.13f, 1f),
+            new Color(0.68f, 0.18f, 0.16f, 0.85f),
+            2f);
+        innerTrim.anchorMin = Vector2.zero;
+        innerTrim.anchorMax = Vector2.one;
+        innerTrim.offsetMin = new Vector2(10f, 10f);
+        innerTrim.offsetMax = new Vector2(-10f, -10f);
+        Transform contentRoot = innerTrim.Find("Fill") ?? innerTrim;
+
+        // Ornate Top Scroll Ribbon Header (Pokiwar-style banner!)
+        GameObject headerObj = new GameObject("HeaderRibbon");
+        headerObj.transform.SetParent(cardRt, false);
+        RectTransform headerRt = headerObj.AddComponent<RectTransform>();
+        headerRt.anchorMin = new Vector2(0.5f, 1f);
+        headerRt.anchorMax = new Vector2(0.5f, 1f);
+        headerRt.pivot = new Vector2(0.5f, 0.5f);
+        headerRt.sizeDelta = new Vector2(720f, 108f);
+        headerRt.anchoredPosition = new Vector2(0f, -12f);
+
+        UnityEngine.UI.Image headerImg = headerObj.AddComponent<UnityEngine.UI.Image>();
+        if (headerScrollSprite != null)
+        {
+            headerImg.sprite = headerScrollSprite;
+            headerImg.type = UnityEngine.UI.Image.Type.Sliced;
+            headerImg.color = Color.white;
+        }
+        else
+        {
+            headerImg.sprite = CharacterWorldHUD.GetRuntimeWhiteSprite();
+            headerImg.color = new Color(0.58f, 0.16f, 0.15f, 1f);
+        }
+        headerImg.raycastTarget = false;
 
         TextMeshProUGUI title = MetaUIHelper.CreateText(
-            contentRoot,
+            headerObj.transform,
             "Title",
-            "RUNIC BOARD GUIDE",
-            36f,
-            new Color(0.98f, 0.82f, 0.36f, 1f),
+            "GEM & COMBO GUIDE",
+            32f,
+            new Color(1f, 0.90f, 0.50f, 1f),
             TextAlignmentOptions.Center,
             FontStyles.Bold);
-        title.rectTransform.anchorMin = new Vector2(0f, 0.88f);
-        title.rectTransform.anchorMax = new Vector2(1f, 0.98f);
+        title.rectTransform.offsetMin = new Vector2(70f, 8f);
+        title.rectTransform.offsetMax = new Vector2(-70f, -8f);
+        title.enableAutoSizing = true;
+        title.fontSizeMin = 22f;
+        title.fontSizeMax = 32f;
 
-        string guideBody =
-            "<color=#FCA5A5><b>[RED - SWORD]</b></color>  Deal direct Attack Damage to target enemy.\n\n" +
-            "<color=#4ADE80><b>[GREEN - HEART]</b></color>  Restore HP (scales with Max HP).\n\n" +
-            "<color=#7DD3FC><b>[BLUE - SHIELD]</b></color>  Gain Shield to absorb incoming hits.\n\n" +
-            "<color=#FDE047><b>[GOLD - STAR]</b></color>  Boost Crit Rate for 4 turns (overflow -> Bonus DMG).\n\n" +
-            "<color=#FB923C><b>[ORANGE - BOLT]</b></color>  Boost Crit Damage for 4 turns (overflow -> Bonus DMG).\n\n" +
-            "<color=#D8B4FE><b>[PURPLE - WING]</b></color>  Boost Dodge Rate for 4 turns (overflow -> Shield).\n\n" +
-            "<color=#FAD15C><b>SPECIAL MATCHES & SHARED BOARD</b></color>\n" +
-            "• <b>Match 4:</b> Blasts entire Row or Column!\n" +
-            "• <b>Match 5+:</b> Cross Blast + Multi-target Cleave!\n" +
-            "• <b>Shared Runic Board:</b> Enemies also swap gems on their turn (glowing amber ring marks the next acting enemy).";
+        // Top-right corner 'X' close button
+        UnityEngine.UI.Button closeXBtn = MetaUIHelper.CreateButton(
+            cardRt,
+            "CloseXBtn",
+            "X",
+            28f,
+            new Color(0.72f, 0.18f, 0.16f, 1f),
+            out _,
+            out _);
+        RectTransform closeXRt = closeXBtn.GetComponent<RectTransform>();
+        closeXRt.anchorMin = new Vector2(1f, 1f);
+        closeXRt.anchorMax = new Vector2(1f, 1f);
+        closeXRt.pivot = new Vector2(1f, 1f);
+        closeXRt.sizeDelta = new Vector2(64f, 64f);
+        closeXRt.anchoredPosition = new Vector2(-16f, -16f);
+        closeXBtn.onClick.AddListener(CloseQuickGuideModal);
 
-        TextMeshProUGUI bodyTxt = MetaUIHelper.CreateText(
+        // SECTION 1 TITLE: ELEMENTAL GEMS (2x3 visual icon cards like Pokiwar!)
+        TextMeshProUGUI sec1Title = MetaUIHelper.CreateText(
             contentRoot,
-            "Body",
-            guideBody,
-            25f,
-            new Color(0.92f, 0.90f, 0.86f, 1f),
-            TextAlignmentOptions.TopLeft,
-            FontStyles.Normal);
-        bodyTxt.enableWordWrapping = true;
-        bodyTxt.enableAutoSizing = true;
-        bodyTxt.fontSizeMin = 18f;
-        bodyTxt.fontSizeMax = 25f;
-        bodyTxt.rectTransform.anchorMin = new Vector2(0f, 0.14f);
-        bodyTxt.rectTransform.anchorMax = new Vector2(1f, 0.86f);
-        bodyTxt.rectTransform.offsetMin = new Vector2(36f, 12f);
-        bodyTxt.rectTransform.offsetMax = new Vector2(-36f, -12f);
+            "Sec1Header",
+            "RUNIC GEMS (MATCH 3+ TO ACTIVATE)",
+            22f,
+            new Color(0.95f, 0.78f, 0.38f, 1f),
+            TextAlignmentOptions.Center,
+            FontStyles.Bold);
+        sec1Title.rectTransform.anchorMin = new Vector2(0.04f, 0.865f);
+        sec1Title.rectTransform.anchorMax = new Vector2(0.96f, 0.915f);
 
+        GameObject gemGridObj = new GameObject("GemCardsGrid");
+        gemGridObj.transform.SetParent(contentRoot, false);
+        RectTransform gemGridRt = gemGridObj.AddComponent<RectTransform>();
+        gemGridRt.anchorMin = new Vector2(0.035f, 0.435f);
+        gemGridRt.anchorMax = new Vector2(0.965f, 0.86f);
+        gemGridRt.offsetMin = Vector2.zero;
+        gemGridRt.offsetMax = Vector2.zero;
+
+        GridLayoutGroup glg = gemGridObj.AddComponent<GridLayoutGroup>();
+        glg.cellSize = new Vector2(412f, 124f);
+        glg.spacing = new Vector2(18f, 14f);
+        glg.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
+        glg.constraintCount = 2;
+        glg.childAlignment = TextAnchor.MiddleCenter;
+
+        BuildVisualGemCard(gemGridObj.transform, gemSprites, GemType.Damage, "SWORD GEM", new Color(1f, 0.45f, 0.45f, 1f), "Strike enemy for direct DMG.\n2+ groups trigger Cleave!");
+        BuildVisualGemCard(gemGridObj.transform, gemSprites, GemType.Health, "HEART GEM", new Color(0.35f, 0.92f, 0.55f, 1f), "Restore HP instantly\n(scales with Max HP).");
+        BuildVisualGemCard(gemGridObj.transform, gemSprites, GemType.Shield, "SHIELD GEM", new Color(0.45f, 0.82f, 1f, 1f), "Gain Shield armor to\nblock incoming hits.");
+        BuildVisualGemCard(gemGridObj.transform, gemSprites, GemType.CritRate, "STAR GEM", new Color(1f, 0.86f, 0.32f, 1f), "+Crit Rate for 4 turns.\nOverflow -> Bonus DMG!");
+        BuildVisualGemCard(gemGridObj.transform, gemSprites, GemType.CritDamage, "BOLT GEM", new Color(1f, 0.58f, 0.24f, 1f), "+Crit DMG for 4 turns.\nOverflow -> Bonus DMG!");
+        BuildVisualGemCard(gemGridObj.transform, gemSprites, GemType.Dodge, "WING GEM", new Color(0.84f, 0.58f, 1f, 1f), "+Dodge chance (4 turns).\nOverflow -> Bonus Shield!");
+
+        // SECTION 2 TITLE: VISUAL COMBO FORMATIONS (Pokiwar 4-in-row / 5-cross diagrams!)
+        TextMeshProUGUI sec2Title = MetaUIHelper.CreateText(
+            contentRoot,
+            "Sec2Header",
+            "SPECIAL COMBOS & RIVAL DUEL RULES",
+            22f,
+            new Color(0.95f, 0.78f, 0.38f, 1f),
+            TextAlignmentOptions.Center,
+            FontStyles.Bold);
+        sec2Title.rectTransform.anchorMin = new Vector2(0.04f, 0.375f);
+        sec2Title.rectTransform.anchorMax = new Vector2(0.96f, 0.425f);
+
+        GameObject comboRowObj = new GameObject("ComboCardsRow");
+        comboRowObj.transform.SetParent(contentRoot, false);
+        RectTransform comboRowRt = comboRowObj.AddComponent<RectTransform>();
+        comboRowRt.anchorMin = new Vector2(0.035f, 0.125f);
+        comboRowRt.anchorMax = new Vector2(0.965f, 0.37f);
+        comboRowRt.offsetMin = Vector2.zero;
+        comboRowRt.offsetMax = Vector2.zero;
+
+        HorizontalLayoutGroup hlg = comboRowObj.AddComponent<HorizontalLayoutGroup>();
+        hlg.spacing = 14f;
+        hlg.childControlWidth = true;
+        hlg.childControlHeight = true;
+        hlg.childForceExpandWidth = true;
+        hlg.childForceExpandHeight = true;
+
+        Sprite swordSp = gemSprites.ContainsKey(GemType.Damage) ? gemSprites[GemType.Damage] : null;
+        Sprite boltSp = gemSprites.ContainsKey(GemType.CritDamage) ? gemSprites[GemType.CritDamage] : swordSp;
+        Sprite heartSp = gemSprites.ContainsKey(GemType.Health) ? gemSprites[GemType.Health] : swordSp;
+        Sprite shieldSp = gemSprites.ContainsKey(GemType.Shield) ? gemSprites[GemType.Shield] : swordSp;
+
+        BuildVisualComboCard(
+            comboRowObj.transform,
+            "MATCH 4 LINE",
+            new Color(1f, 0.78f, 0.28f, 1f),
+            new[] { swordSp, swordSp, swordSp, swordSp },
+            "LINE BLAST!\nExplodes full Row or Column.");
+
+        BuildVisualComboCard(
+            comboRowObj.transform,
+            "MATCH 5+ / T / L",
+            new Color(1f, 0.46f, 0.32f, 1f),
+            new[] { boltSp, boltSp, swordSp, boltSp, boltSp },
+            "CROSS BLAST!\nClears Row + Col & Cleaves foes.");
+
+        BuildVisualComboCard(
+            comboRowObj.transform,
+            "SHARED BOARD AI",
+            new Color(0.48f, 0.86f, 0.98f, 1f),
+            new[] { swordSp, heartSp, shieldSp },
+            "RIVAL SWAPS!\nFoes steal Gems too (Amber ring).");
+
+        // Bottom CTA button
         UnityEngine.UI.Button gotItBtn = MetaUIHelper.CreateButton(
             contentRoot,
             "CloseGuideBtn",
-            "GOT IT",
-            28f,
+            "BACK TO BATTLE",
+            26f,
             MetaUIHelper.BtnCrimsonAction,
             out _,
             out _);
         RectTransform closeRt = gotItBtn.GetComponent<RectTransform>();
-        closeRt.anchorMin = new Vector2(0.5f, 0.03f);
-        closeRt.anchorMax = new Vector2(0.5f, 0.03f);
+        closeRt.anchorMin = new Vector2(0.5f, 0.025f);
+        closeRt.anchorMax = new Vector2(0.5f, 0.025f);
         closeRt.pivot = new Vector2(0.5f, 0f);
-        closeRt.sizeDelta = new Vector2(280f, 76f);
+        closeRt.sizeDelta = new Vector2(320f, 68f);
         closeRt.anchoredPosition = Vector2.zero;
         gotItBtn.onClick.AddListener(CloseQuickGuideModal);
 
         quickGuideModalObj = backdrop.gameObject;
         quickGuideModalObj.SetActive(false);
+    }
+
+    private void BuildVisualGemCard(
+        Transform parent,
+        Dictionary<GemType, Sprite> sprites,
+        GemType type,
+        string gemTitle,
+        Color titleColor,
+        string effectDesc)
+    {
+        RectTransform card = MetaUIHelper.CreateFramedCard(
+            parent,
+            $"GemInfo_{type}",
+            new Color(0.14f, 0.14f, 0.18f, 0.96f),
+            new Color(titleColor.r * 0.75f, titleColor.g * 0.75f, titleColor.b * 0.75f, 0.65f),
+            2f);
+        Transform fill = card.Find("Fill") ?? card;
+
+        // Real Gem Sprite icon on the left!
+        GameObject iconSlot = new GameObject("GemSpriteSlot");
+        iconSlot.transform.SetParent(fill, false);
+        RectTransform iconRt = iconSlot.AddComponent<RectTransform>();
+        iconRt.anchorMin = new Vector2(0f, 0.5f);
+        iconRt.anchorMax = new Vector2(0f, 0.5f);
+        iconRt.pivot = new Vector2(0f, 0.5f);
+        iconRt.sizeDelta = new Vector2(92f, 92f);
+        iconRt.anchoredPosition = new Vector2(14f, 0f);
+
+        UnityEngine.UI.Image gemImg = iconSlot.AddComponent<UnityEngine.UI.Image>();
+        if (sprites != null && sprites.TryGetValue(type, out Sprite sp) && sp != null)
+        {
+            gemImg.sprite = sp;
+            gemImg.preserveAspect = true;
+            gemImg.color = Color.white;
+        }
+        else
+        {
+            gemImg.sprite = CharacterWorldHUD.GetRuntimeWhiteSprite();
+            gemImg.color = titleColor;
+        }
+        gemImg.raycastTarget = false;
+
+        TextMeshProUGUI nameTxt = MetaUIHelper.CreateText(
+            fill,
+            "GemName",
+            gemTitle,
+            23f,
+            titleColor,
+            TextAlignmentOptions.BottomLeft,
+            FontStyles.Bold);
+        nameTxt.rectTransform.anchorMin = new Vector2(0f, 0.56f);
+        nameTxt.rectTransform.anchorMax = new Vector2(1f, 0.94f);
+        nameTxt.rectTransform.offsetMin = new Vector2(118f, 0f);
+        nameTxt.rectTransform.offsetMax = new Vector2(-12f, 0f);
+        nameTxt.enableAutoSizing = true;
+        nameTxt.fontSizeMin = 16f;
+        nameTxt.fontSizeMax = 23f;
+
+        TextMeshProUGUI descTxt = MetaUIHelper.CreateText(
+            fill,
+            "GemDesc",
+            effectDesc,
+            18f,
+            new Color(0.88f, 0.86f, 0.82f, 1f),
+            TextAlignmentOptions.TopLeft,
+            FontStyles.Normal);
+        descTxt.enableWordWrapping = true;
+        descTxt.enableAutoSizing = true;
+        descTxt.fontSizeMin = 13f;
+        descTxt.fontSizeMax = 18f;
+        descTxt.rectTransform.anchorMin = new Vector2(0f, 0.06f);
+        descTxt.rectTransform.anchorMax = new Vector2(1f, 0.56f);
+        descTxt.rectTransform.offsetMin = new Vector2(118f, 0f);
+        descTxt.rectTransform.offsetMax = new Vector2(-10f, 0f);
+    }
+
+    private void BuildVisualComboCard(
+        Transform parent,
+        string header,
+        Color accentColor,
+        Sprite[] miniSprites,
+        string desc)
+    {
+        RectTransform card = MetaUIHelper.CreateFramedCard(
+            parent,
+            $"Combo_{header}",
+            new Color(0.13f, 0.13f, 0.17f, 0.96f),
+            new Color(accentColor.r * 0.8f, accentColor.g * 0.8f, accentColor.b * 0.8f, 0.7f),
+            2f);
+        Transform fill = card.Find("Fill") ?? card;
+
+        TextMeshProUGUI headTxt = MetaUIHelper.CreateText(
+            fill,
+            "Header",
+            header,
+            20f,
+            accentColor,
+            TextAlignmentOptions.Center,
+            FontStyles.Bold);
+        headTxt.rectTransform.anchorMin = new Vector2(0.04f, 0.74f);
+        headTxt.rectTransform.anchorMax = new Vector2(0.96f, 0.96f);
+        headTxt.enableAutoSizing = true;
+        headTxt.fontSizeMin = 14f;
+        headTxt.fontSizeMax = 20f;
+
+        // Visual mini-gem row in the middle!
+        GameObject rowObj = new GameObject("MiniGemRow");
+        rowObj.transform.SetParent(fill, false);
+        RectTransform rowRt = rowObj.AddComponent<RectTransform>();
+        rowRt.anchorMin = new Vector2(0.05f, 0.40f);
+        rowRt.anchorMax = new Vector2(0.95f, 0.72f);
+        rowRt.offsetMin = Vector2.zero;
+        rowRt.offsetMax = Vector2.zero;
+
+        HorizontalLayoutGroup rowHlg = rowObj.AddComponent<HorizontalLayoutGroup>();
+        rowHlg.spacing = 4f;
+        rowHlg.childAlignment = TextAnchor.MiddleCenter;
+        rowHlg.childControlWidth = false;
+        rowHlg.childControlHeight = false;
+        rowHlg.childForceExpandWidth = false;
+        rowHlg.childForceExpandHeight = false;
+
+        if (miniSprites != null)
+        {
+            float iconSize = miniSprites.Length >= 5 ? 42f : 48f;
+            for (int i = 0; i < miniSprites.Length; i++)
+            {
+                if (miniSprites[i] == null) continue;
+                GameObject g = new GameObject($"MiniGem_{i}");
+                g.transform.SetParent(rowObj.transform, false);
+                RectTransform grt = g.AddComponent<RectTransform>();
+                grt.sizeDelta = new Vector2(iconSize, iconSize);
+                UnityEngine.UI.Image gi = g.AddComponent<UnityEngine.UI.Image>();
+                gi.sprite = miniSprites[i];
+                gi.preserveAspect = true;
+                gi.raycastTarget = false;
+            }
+        }
+
+        TextMeshProUGUI descTxt = MetaUIHelper.CreateText(
+            fill,
+            "Desc",
+            desc,
+            17f,
+            new Color(0.88f, 0.86f, 0.82f, 1f),
+            TextAlignmentOptions.Center,
+            FontStyles.Normal);
+        descTxt.enableWordWrapping = true;
+        descTxt.enableAutoSizing = true;
+        descTxt.fontSizeMin = 12f;
+        descTxt.fontSizeMax = 17f;
+        descTxt.rectTransform.anchorMin = new Vector2(0.05f, 0.05f);
+        descTxt.rectTransform.anchorMax = new Vector2(0.95f, 0.38f);
     }
 
     public void ShowEnemyInfo(Enemy enemy)
@@ -815,11 +1124,11 @@ public class GameplayUIManager : MonoBehaviour
             float threeStarHp = cfg != null ? cfg.threeStarHPThreshold : 70f;
 
             string bossTag = isBoss ? " <color=#FBBF24>[BOSS]</color>" : "";
-            roundText.text = $"LV.{lvId} — WAVE {round}/{totalWaves}{bossTag}  <size=72%><color=#D6D3D1>(3★ >{threeStarHp:0}% HP)</color></size>";
+            roundText.text = $"LV.{lvId} - WAVE {round}/{totalWaves}{bossTag}  <size=72%><color=#FAD15C>(3-STAR >{threeStarHp:0}% HP)</color></size>";
         }
         else
         {
-            roundText.text = $"ABYSSAL RIFT — ROUND {round}";
+            roundText.text = $"ABYSSAL RIFT - ROUND {round}";
         }
     }
 
