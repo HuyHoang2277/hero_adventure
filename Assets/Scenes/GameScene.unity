@@ -393,8 +393,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   gridSize: 8
   matchThreshold: 3
-  spacing: 0.66
-  startY: -0.65
+  spacing: 0.65
+  startY: -0.685
   gemSpawner: {fileID: 22158565}
 --- !u!114 &22158565
 MonoBehaviour:
@@ -20541,7 +20541,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   m_Material: {fileID: 0}
-  m_Color: {r: 0.84313726, g: 0.7372549, b: 0.6509804, a: 1}
+  m_Color: {r: 0.078431375, g: 0.078431375, b: 0.09803922, a: 1}
   m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
@@ -21218,7 +21218,7 @@ RectTransform:
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 1, y: 1}
   m_AnchoredPosition: {x: 0, y: -54}
-  m_SizeDelta: {x: -130, y: -130}
+  m_SizeDelta: {x: -116, y: -119}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &2100477327
 MonoBehaviour:
