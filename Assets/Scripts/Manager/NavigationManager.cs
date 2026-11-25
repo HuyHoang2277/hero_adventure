@@ -41,6 +41,25 @@ public class NavigationManager : MonoBehaviour
     private EquipmentTabController equipmentController;
     private TalentTabController talentController;
     private RewardTabController rewardController;
+    private readonly System.Collections.Generic.Dictionary<MenuTab, GameObject> tabBadges = new System.Collections.Generic.Dictionary<MenuTab, GameObject>();
+
+    private void OnEnable()
+    {
+        ObserverManager<EventID>.AddRegisterEvent(EventID.OnResourcesChanged, HandleBadgeDataChanged);
+        ObserverManager<EventID>.AddRegisterEvent(EventID.OnMetaProgressionChanged, HandleBadgeDataChanged);
+        RefreshTabBadges();
+    }
+
+    private void OnDisable()
+    {
+        ObserverManager<EventID>.RemoveAddListener(EventID.OnResourcesChanged, HandleBadgeDataChanged);
+        ObserverManager<EventID>.RemoveAddListener(EventID.OnMetaProgressionChanged, HandleBadgeDataChanged);
+    }
+
+    private void HandleBadgeDataChanged(object param)
+    {
+        RefreshTabBadges();
+    }
 
     public void InitializeNavigation()
     {
@@ -81,7 +100,65 @@ public class NavigationManager : MonoBehaviour
         
         yield return new WaitForEndOfFrame();
 
+        EnsureTabBadges();
         SwitchTab(MenuTab.Battle, false);
+        RefreshTabBadges();
+    }
+
+    private void EnsureTabBadges()
+    {
+        if (tabs == null) return;
+        foreach (var tab in tabs)
+        {
+            if (tab == null || tab.tabButton == null) continue;
+            if (tab.tabType == MenuTab.Battle || tab.tabType == MenuTab.Shop) continue;
+            if (tabBadges.ContainsKey(tab.tabType) && tabBadges[tab.tabType] != null) continue;
+
+            Transform existing = tab.tabButton.transform.Find("RedDotBadge");
+            if (existing != null)
+            {
+                tabBadges[tab.tabType] = existing.gameObject;
+                continue;
+            }
+
+            RectTransform badgeRt = MetaUIHelper.CreateFramedCard(
+                tab.tabButton.transform,
+                "RedDotBadge",
+                new Color(0.84f, 0.16f, 0.14f, 1f),
+                new Color(0.98f, 0.84f, 0.42f, 1f),
+                2f);
+            badgeRt.anchorMin = new Vector2(1f, 1f);
+            badgeRt.anchorMax = new Vector2(1f, 1f);
+            badgeRt.pivot = new Vector2(1f, 1f);
+            badgeRt.sizeDelta = new Vector2(28f, 28f);
+            badgeRt.anchoredPosition = new Vector2(-8f, -8f);
+
+            Transform fill = badgeRt.Find("Fill");
+            var bangTxt = MetaUIHelper.CreateText(fill != null ? fill : badgeRt, "Bang", "!", 20f, Color.white, TMPro.TextAlignmentOptions.Center, TMPro.FontStyles.Bold);
+            bangTxt.raycastTarget = false;
+
+            badgeRt.gameObject.SetActive(false);
+            tabBadges[tab.tabType] = badgeRt.gameObject;
+        }
+    }
+
+    public void RefreshTabBadges()
+    {
+        EnsureTabBadges();
+        SecureGameData data = DataManager.Instance?.GameData;
+        if (data == null) return;
+
+        SetBadgeActive(MenuTab.Reward, MetaProgressionSystem.HasClaimableMilestone(data));
+        SetBadgeActive(MenuTab.Talent, MetaProgressionSystem.HasAffordableTalentUpgrade(data));
+        SetBadgeActive(MenuTab.Equipment, MetaProgressionSystem.HasActionableEquipment(data));
+    }
+
+    private void SetBadgeActive(MenuTab tab, bool active)
+    {
+        if (tabBadges.TryGetValue(tab, out GameObject badge) && badge != null)
+        {
+            badge.SetActive(active);
+        }
     }
 
     private void SetupTabController(NavigationTabItem tab)
@@ -119,6 +196,7 @@ public class NavigationManager : MonoBehaviour
             case MenuTab.Talent: talentController?.Refresh(); break;
             case MenuTab.Reward: rewardController?.Refresh(); break;
         }
+        RefreshTabBadges();
     }
 
     private void OnDestroy()

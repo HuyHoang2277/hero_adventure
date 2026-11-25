@@ -11,6 +11,9 @@ public class Enemy : BaseCharacter
     private int maxSupportCooldown = 2;
     private int currentSupportCooldown = 2;
     private bool isActingNext = false;
+    private bool isTargetSelectionHighlighted = false;
+    private Vector3 indicatorBaseScale = Vector3.one;
+    private bool hasRecordedIndicatorScale = false;
 
     public int SupportCooldown => currentSupportCooldown;
     public bool IsActingNext => isActingNext;
@@ -38,6 +41,7 @@ public class Enemy : BaseCharacter
         isActingNext = actingNext;
         EnsureWorldHUD();
         worldHUD.UpdateIntent(isActingNext, currentSupportCooldown);
+        RefreshGroundRingVisual();
     }
 
     public void SetActingNext(bool actingNext)
@@ -47,6 +51,7 @@ public class Enemy : BaseCharacter
         {
             worldHUD.UpdateIntent(isActingNext, currentSupportCooldown);
         }
+        RefreshGroundRingVisual();
     }
 
     public void ResetSupportCooldown()
@@ -138,13 +143,54 @@ public class Enemy : BaseCharacter
 
     public void ShowTargetIndicator()
     {
-        if (targetIndicator != null)
-            targetIndicator.gameObject.SetActive(true);
+        isTargetSelectionHighlighted = true;
+        RefreshGroundRingVisual();
     }
 
     public void HideTargetIndicator()
     {
-        if (targetIndicator != null)
+        isTargetSelectionHighlighted = false;
+        RefreshGroundRingVisual();
+    }
+
+    private void RefreshGroundRingVisual()
+    {
+        if (targetIndicator == null) return;
+
+        if (!hasRecordedIndicatorScale)
+        {
+            indicatorBaseScale = targetIndicator.transform.localScale;
+            if (indicatorBaseScale.sqrMagnitude < 0.0001f) indicatorBaseScale = Vector3.one;
+            hasRecordedIndicatorScale = true;
+        }
+
+        targetIndicator.transform.DOKill();
+        targetIndicator.transform.localScale = indicatorBaseScale;
+
+        if (IsDead() || !gameObject.activeInHierarchy)
+        {
             targetIndicator.gameObject.SetActive(false);
+            return;
+        }
+
+        if (isTargetSelectionHighlighted)
+        {
+            targetIndicator.gameObject.SetActive(true);
+            targetIndicator.color = new Color(1f, 0.28f, 0.22f, 1f);
+            targetIndicator.transform
+                .DOScale(indicatorBaseScale * 1.14f, 0.38f)
+                .SetEase(Ease.InOutSine)
+                .SetLoops(-1, LoopType.Yoyo);
+        }
+        else if (isActingNext)
+        {
+            // Vòng sáng hổ phách mờ báo hiệu quái sẽ đi cờ ở lượt kế tiếp
+            targetIndicator.gameObject.SetActive(true);
+            targetIndicator.color = new Color(1f, 0.76f, 0.24f, 0.46f);
+        }
+        else
+        {
+            targetIndicator.gameObject.SetActive(false);
+        }
     }
 }

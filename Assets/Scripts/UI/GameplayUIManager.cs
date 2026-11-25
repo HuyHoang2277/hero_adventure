@@ -56,6 +56,14 @@ public class GameplayUIManager : MonoBehaviour
     private readonly List<GameObject> activePopups = new List<GameObject>();
     private int popupStaggerCounter = 0;
 
+    // Combat Clarity & Quick Guide runtime UI
+    private TextMeshProUGUI turnPhaseTitleText;
+    private TextMeshProUGUI turnPhaseStateText;
+    private CanvasGroup targetPromptGroup;
+    private Tween targetPromptPulseTween;
+    private UnityEngine.UI.Button quickGuideButton;
+    private GameObject quickGuideModalObj;
+
     private static readonly Color SpeedNormalBgColor = new Color(0.18f, 0.22f, 0.30f, 0.94f);
     private static readonly Color SpeedFastBgColor = new Color(0.92f, 0.56f, 0.08f, 0.96f);
 
@@ -89,6 +97,10 @@ public class GameplayUIManager : MonoBehaviour
         ObserverManager<EventID>.AddRegisterEvent(EventID.OnUpdatePlayerStats, UpdatePlayerStats);
         ObserverManager<EventID>.AddRegisterEvent(EventID.OnUpdateRoundCount, UpdateRoundCount);
         ObserverManager<EventID>.AddRegisterEvent(EventID.OnShowDamagePopup, HandleShowDamagePopup);
+        ObserverManager<EventID>.AddRegisterEvent(EventID.OnPlayerTurnStart, HandlePlayerTurnStart);
+        ObserverManager<EventID>.AddRegisterEvent(EventID.OnEnemyTurnStart, HandleEnemyTurnStart);
+        ObserverManager<EventID>.AddRegisterEvent(EventID.OnEnemyTargetSelectionRequired, HandleTargetSelectionRequired);
+        ObserverManager<EventID>.AddRegisterEvent(EventID.OnEnemyTargetSelected, HandleTargetSelected);
     }
 
     private void OnDisable()
@@ -96,6 +108,10 @@ public class GameplayUIManager : MonoBehaviour
         ObserverManager<EventID>.RemoveAddListener(EventID.OnUpdatePlayerStats, UpdatePlayerStats);
         ObserverManager<EventID>.RemoveAddListener(EventID.OnUpdateRoundCount, UpdateRoundCount);
         ObserverManager<EventID>.RemoveAddListener(EventID.OnShowDamagePopup, HandleShowDamagePopup);
+        ObserverManager<EventID>.RemoveAddListener(EventID.OnPlayerTurnStart, HandlePlayerTurnStart);
+        ObserverManager<EventID>.RemoveAddListener(EventID.OnEnemyTurnStart, HandleEnemyTurnStart);
+        ObserverManager<EventID>.RemoveAddListener(EventID.OnEnemyTargetSelectionRequired, HandleTargetSelectionRequired);
+        ObserverManager<EventID>.RemoveAddListener(EventID.OnEnemyTargetSelected, HandleTargetSelected);
     }
 
     public void Init()
@@ -115,12 +131,23 @@ public class GameplayUIManager : MonoBehaviour
         }
 
         EnsureSpeedToggleButton();
+        EnsureQuickGuideButton();
         EnsureNotificationBanner();
+        EnsureTurnPhaseStatusWidget();
+        EnsureTargetSelectionPrompt();
+        HideTargetSelectionPrompt();
+        CloseQuickGuideModal();
 
         if (speedToggleButton != null)
         {
             speedToggleButton.onClick.RemoveListener(OnSpeedToggleClicked);
             speedToggleButton.onClick.AddListener(OnSpeedToggleClicked);
+        }
+
+        if (quickGuideButton != null)
+        {
+            quickGuideButton.onClick.RemoveListener(ToggleQuickGuideModal);
+            quickGuideButton.onClick.AddListener(ToggleQuickGuideModal);
         }
 
         float speed = BattleManager.Instance != null ? BattleManager.Instance.CurrentBattleSpeed : 1f;
@@ -163,6 +190,8 @@ public class GameplayUIManager : MonoBehaviour
         }
 
         HideEnemyInfo();
+        HideTargetSelectionPrompt();
+        CloseQuickGuideModal();
         ReleaseAllActivePopups();
         if (damagePopupObj != null)
         {
@@ -177,7 +206,9 @@ public class GameplayUIManager : MonoBehaviour
     {
         if (pauseButton != null) pauseButton.onClick.RemoveAllListeners();
         if (speedToggleButton != null) speedToggleButton.onClick.RemoveAllListeners();
+        if (quickGuideButton != null) quickGuideButton.onClick.RemoveAllListeners();
         if (notificationBannerGroup != null) notificationBannerGroup.DOKill();
+        if (targetPromptPulseTween != null) targetPromptPulseTween.Kill();
         if (playerHpFill != null) playerHpFill.DOKill();
         if (playerShieldFill != null) playerShieldFill.DOKill();
     }
@@ -370,11 +401,342 @@ public class GameplayUIManager : MonoBehaviour
 
     public void UpdateTurnCount(int currentTurns)
     {
-        if (turnIcons == null) return;
-        for (int i = 0; i < turnIcons.Length; i++)
+        EnsureTurnPhaseStatusWidget();
+
+        // Hide legacy 5-dot AP icons cleanly since Turn Phase widget replaces them
+        if (turnIcons != null)
         {
-            if (turnIcons[i] != null) turnIcons[i].SetActive(i < currentTurns);
+            for (int i = 0; i < turnIcons.Length; i++)
+            {
+                if (turnIcons[i] != null) turnIcons[i].SetActive(false);
+            }
         }
+    }
+
+    private void HandlePlayerTurnStart(object param)
+    {
+        HideTargetSelectionPrompt();
+        SetTurnPhaseStatus("YOUR TURN", new Color(0.32f, 0.92f, 0.54f, 1f));
+    }
+
+    private void HandleEnemyTurnStart(object param)
+    {
+        HideTargetSelectionPrompt();
+        SetTurnPhaseStatus("ENEMY TURN", new Color(0.98f, 0.44f, 0.38f, 1f));
+    }
+
+    private void HandleTargetSelectionRequired(object param)
+    {
+        SetTurnPhaseStatus("SELECT TARGET", new Color(0.98f, 0.80f, 0.24f, 1f));
+        ShowTargetSelectionPrompt();
+    }
+
+    private void HandleTargetSelected(object param)
+    {
+        HideTargetSelectionPrompt();
+    }
+
+    private void EnsureTurnPhaseStatusWidget()
+    {
+        if (turnPhaseStateText != null) return;
+        if (turnIcons == null || turnIcons.Length == 0 || turnIcons[0] == null) return;
+
+        // turnIcons[0] sits inside TurnContainer inside CharacterTurn
+        Transform turnListTf = turnIcons[0].transform.parent;
+        Transform characterTurnRoot = turnListTf != null && turnListTf.parent != null ? turnListTf.parent : turnListTf;
+        if (characterTurnRoot == null) return;
+
+        // Reuse or tidy up static "Action Point" header inside CharacterTurn
+        TextMeshProUGUI[] existingTexts = characterTurnRoot.GetComponentsInChildren<TextMeshProUGUI>(true);
+        foreach (var t in existingTexts)
+        {
+            if (t != null && t.name != "TurnPhaseStateText")
+            {
+                turnPhaseTitleText = t;
+                turnPhaseTitleText.text = "TURN PHASE";
+                turnPhaseTitleText.color = new Color(0.84f, 0.78f, 0.66f, 0.92f);
+                turnPhaseTitleText.enableAutoSizing = true;
+                turnPhaseTitleText.fontSizeMin = 14f;
+                turnPhaseTitleText.fontSizeMax = 22f;
+                break;
+            }
+        }
+
+        if (turnListTf != null && turnListTf != characterTurnRoot)
+        {
+            turnListTf.gameObject.SetActive(false);
+        }
+
+        Transform existingState = characterTurnRoot.Find("TurnPhaseStateText");
+        if (existingState != null)
+        {
+            turnPhaseStateText = existingState.GetComponent<TextMeshProUGUI>();
+            return;
+        }
+
+        GameObject stateObj = new GameObject("TurnPhaseStateText");
+        stateObj.transform.SetParent(characterTurnRoot, false);
+        RectTransform rt = stateObj.AddComponent<RectTransform>();
+        rt.anchorMin = new Vector2(0f, 0.05f);
+        rt.anchorMax = new Vector2(1f, 0.62f);
+        rt.offsetMin = new Vector2(6f, 0f);
+        rt.offsetMax = new Vector2(-6f, 0f);
+
+        turnPhaseStateText = stateObj.AddComponent<TextMeshProUGUI>();
+        if (DefaultFont != null) turnPhaseStateText.font = DefaultFont;
+        turnPhaseStateText.text = "READY";
+        turnPhaseStateText.alignment = TextAlignmentOptions.Center;
+        turnPhaseStateText.fontStyle = FontStyles.Bold;
+        turnPhaseStateText.enableAutoSizing = true;
+        turnPhaseStateText.fontSizeMin = 15f;
+        turnPhaseStateText.fontSizeMax = 26f;
+        turnPhaseStateText.color = new Color(0.96f, 0.84f, 0.42f, 1f);
+        turnPhaseStateText.raycastTarget = false;
+    }
+
+    private void SetTurnPhaseStatus(string label, Color color)
+    {
+        EnsureTurnPhaseStatusWidget();
+        if (turnPhaseStateText == null) return;
+
+        turnPhaseStateText.text = label;
+        turnPhaseStateText.color = color;
+        turnPhaseStateText.transform.DOKill();
+        turnPhaseStateText.transform.localScale = Vector3.one * 0.88f;
+        turnPhaseStateText.transform.DOScale(1f, 0.20f).SetEase(Ease.OutBack).SetUpdate(true);
+    }
+
+    private void EnsureTargetSelectionPrompt()
+    {
+        if (targetPromptGroup != null) return;
+
+        Transform existing = transform.Find("TargetSelectionPromptBanner");
+        if (existing != null)
+        {
+            targetPromptGroup = existing.GetComponent<CanvasGroup>();
+            return;
+        }
+
+        RectTransform cardRt = MetaUIHelper.CreateFramedCard(
+            transform,
+            "TargetSelectionPromptBanner",
+            new Color(0.12f, 0.08f, 0.09f, 0.94f),
+            new Color(0.95f, 0.72f, 0.24f, 0.96f),
+            3f);
+        cardRt.anchorMin = new Vector2(0.5f, 1f);
+        cardRt.anchorMax = new Vector2(0.5f, 1f);
+        cardRt.pivot = new Vector2(0.5f, 0.5f);
+        cardRt.sizeDelta = new Vector2(640f, 68f);
+        cardRt.anchoredPosition = new Vector2(0f, -210f);
+
+        targetPromptGroup = cardRt.gameObject.AddComponent<CanvasGroup>();
+        targetPromptGroup.alpha = 0f;
+        targetPromptGroup.interactable = false;
+        targetPromptGroup.blocksRaycasts = false;
+
+        Transform fill = cardRt.Find("Fill");
+        TextMeshProUGUI txt = MetaUIHelper.CreateText(
+            fill != null ? fill : cardRt,
+            "PromptText",
+            "TAP AN ENEMY TO ATTACK",
+            28f,
+            new Color(1f, 0.88f, 0.42f, 1f),
+            TextAlignmentOptions.Center,
+            FontStyles.Bold);
+        txt.enableAutoSizing = true;
+        txt.fontSizeMin = 18f;
+        txt.fontSizeMax = 28f;
+
+        cardRt.gameObject.SetActive(false);
+    }
+
+    private void ShowTargetSelectionPrompt()
+    {
+        // Only show banner if >= 2 alive enemies (1 enemy auto-selects in 0.3s)
+        EnsureTargetSelectionPrompt();
+        if (targetPromptGroup == null) return;
+
+        targetPromptGroup.gameObject.SetActive(true);
+        targetPromptGroup.DOKill();
+        if (targetPromptPulseTween != null) targetPromptPulseTween.Kill();
+
+        targetPromptGroup.alpha = 0f;
+        targetPromptGroup.transform.localScale = Vector3.one * 0.92f;
+        targetPromptGroup.DOFade(1f, 0.16f).SetUpdate(true);
+        targetPromptPulseTween = targetPromptGroup.transform
+            .DOScale(1.04f, 0.45f)
+            .SetEase(Ease.InOutSine)
+            .SetLoops(-1, LoopType.Yoyo)
+            .SetUpdate(true);
+    }
+
+    private void HideTargetSelectionPrompt()
+    {
+        if (targetPromptPulseTween != null)
+        {
+            targetPromptPulseTween.Kill();
+            targetPromptPulseTween = null;
+        }
+        if (targetPromptGroup != null)
+        {
+            targetPromptGroup.DOKill();
+            targetPromptGroup.alpha = 0f;
+            targetPromptGroup.gameObject.SetActive(false);
+        }
+    }
+
+    private void EnsureQuickGuideButton()
+    {
+        if (quickGuideButton != null || pauseButton == null || pauseButton.transform.parent == null) return;
+
+        Transform topBarParent = pauseButton.transform.parent;
+        Transform existing = topBarParent.Find("QuickGuideButton");
+        if (existing != null)
+        {
+            quickGuideButton = existing.GetComponent<UnityEngine.UI.Button>();
+            return;
+        }
+
+        RectTransform pauseRect = pauseButton.GetComponent<RectTransform>();
+        float pauseWidth = pauseRect != null && pauseRect.sizeDelta.x > 0f ? pauseRect.sizeDelta.x : 75f;
+        float rightOffset = pauseWidth + 14f + 96f + 12f; // Left of SpeedToggleButton
+
+        UnityEngine.UI.Button btn = MetaUIHelper.CreateButton(
+            topBarParent,
+            "QuickGuideButton",
+            "?",
+            34f,
+            new Color(0.56f, 0.18f, 0.16f, 0.95f),
+            out _,
+            out _);
+
+        RectTransform btnRect = btn.GetComponent<RectTransform>();
+        btnRect.anchorMin = new Vector2(1f, 0f);
+        btnRect.anchorMax = new Vector2(1f, 1f);
+        btnRect.pivot = new Vector2(1f, 0.5f);
+        btnRect.sizeDelta = new Vector2(72f, 0f);
+        btnRect.anchoredPosition = new Vector2(-rightOffset, 0f);
+
+        quickGuideButton = btn;
+    }
+
+    private void ToggleQuickGuideModal()
+    {
+        AudioManager.Instance?.PlaySoundButtonClick();
+        EnsureQuickGuideModal();
+        if (quickGuideModalObj == null) return;
+
+        bool nextActive = !quickGuideModalObj.activeSelf;
+        quickGuideModalObj.SetActive(nextActive);
+        if (nextActive)
+        {
+            quickGuideModalObj.transform.SetAsLastSibling();
+        }
+    }
+
+    private void CloseQuickGuideModal()
+    {
+        if (quickGuideModalObj != null)
+        {
+            quickGuideModalObj.SetActive(false);
+        }
+    }
+
+    private void EnsureQuickGuideModal()
+    {
+        if (quickGuideModalObj != null) return;
+
+        Transform existing = transform.Find("QuickGuideModal");
+        if (existing != null)
+        {
+            quickGuideModalObj = existing.gameObject;
+            return;
+        }
+
+        UnityEngine.UI.Image backdrop = MetaUIHelper.CreatePanel(transform, "QuickGuideModal", new Color(0.04f, 0.04f, 0.06f, 0.84f), true);
+        RectTransform bgRt = backdrop.rectTransform;
+        bgRt.anchorMin = Vector2.zero;
+        bgRt.anchorMax = Vector2.one;
+        bgRt.offsetMin = Vector2.zero;
+        bgRt.offsetMax = Vector2.zero;
+
+        UnityEngine.UI.Button bgCloseBtn = backdrop.gameObject.AddComponent<UnityEngine.UI.Button>();
+        bgCloseBtn.transition = Selectable.Transition.None;
+        bgCloseBtn.onClick.AddListener(CloseQuickGuideModal);
+
+        RectTransform cardRt = MetaUIHelper.CreateFramedCard(
+            backdrop.transform,
+            "GuideCard",
+            new Color(0.10f, 0.10f, 0.13f, 0.98f),
+            new Color(0.82f, 0.64f, 0.28f, 0.95f),
+            4f);
+        cardRt.anchorMin = new Vector2(0.5f, 0.5f);
+        cardRt.anchorMax = new Vector2(0.5f, 0.5f);
+        cardRt.pivot = new Vector2(0.5f, 0.5f);
+        cardRt.sizeDelta = new Vector2(880f, 940f);
+        cardRt.anchoredPosition = Vector2.zero;
+
+        Transform fill = cardRt.Find("Fill");
+        Transform contentRoot = fill != null ? fill : cardRt;
+
+        TextMeshProUGUI title = MetaUIHelper.CreateText(
+            contentRoot,
+            "Title",
+            "RUNIC BOARD GUIDE",
+            36f,
+            new Color(0.98f, 0.82f, 0.36f, 1f),
+            TextAlignmentOptions.Center,
+            FontStyles.Bold);
+        title.rectTransform.anchorMin = new Vector2(0f, 0.88f);
+        title.rectTransform.anchorMax = new Vector2(1f, 0.98f);
+
+        string guideBody =
+            "<color=#FCA5A5><b>[RED - SWORD]</b></color>  Deal direct Attack Damage to target enemy.\n\n" +
+            "<color=#4ADE80><b>[GREEN - HEART]</b></color>  Restore HP (scales with Max HP).\n\n" +
+            "<color=#7DD3FC><b>[BLUE - SHIELD]</b></color>  Gain Shield to absorb incoming hits.\n\n" +
+            "<color=#FDE047><b>[GOLD - STAR]</b></color>  Boost Crit Rate for 4 turns (overflow -> Bonus DMG).\n\n" +
+            "<color=#FB923C><b>[ORANGE - BOLT]</b></color>  Boost Crit Damage for 4 turns (overflow -> Bonus DMG).\n\n" +
+            "<color=#D8B4FE><b>[PURPLE - WING]</b></color>  Boost Dodge Rate for 4 turns (overflow -> Shield).\n\n" +
+            "<color=#FAD15C><b>SPECIAL MATCHES & SHARED BOARD</b></color>\n" +
+            "• <b>Match 4:</b> Blasts entire Row or Column!\n" +
+            "• <b>Match 5+:</b> Cross Blast + Multi-target Cleave!\n" +
+            "• <b>Shared Runic Board:</b> Enemies also swap gems on their turn (glowing amber ring marks the next acting enemy).";
+
+        TextMeshProUGUI bodyTxt = MetaUIHelper.CreateText(
+            contentRoot,
+            "Body",
+            guideBody,
+            25f,
+            new Color(0.92f, 0.90f, 0.86f, 1f),
+            TextAlignmentOptions.TopLeft,
+            FontStyles.Normal);
+        bodyTxt.enableWordWrapping = true;
+        bodyTxt.enableAutoSizing = true;
+        bodyTxt.fontSizeMin = 18f;
+        bodyTxt.fontSizeMax = 25f;
+        bodyTxt.rectTransform.anchorMin = new Vector2(0f, 0.14f);
+        bodyTxt.rectTransform.anchorMax = new Vector2(1f, 0.86f);
+        bodyTxt.rectTransform.offsetMin = new Vector2(36f, 12f);
+        bodyTxt.rectTransform.offsetMax = new Vector2(-36f, -12f);
+
+        UnityEngine.UI.Button gotItBtn = MetaUIHelper.CreateButton(
+            contentRoot,
+            "CloseGuideBtn",
+            "GOT IT",
+            28f,
+            MetaUIHelper.BtnCrimsonAction,
+            out _,
+            out _);
+        RectTransform closeRt = gotItBtn.GetComponent<RectTransform>();
+        closeRt.anchorMin = new Vector2(0.5f, 0.03f);
+        closeRt.anchorMax = new Vector2(0.5f, 0.03f);
+        closeRt.pivot = new Vector2(0.5f, 0f);
+        closeRt.sizeDelta = new Vector2(280f, 76f);
+        closeRt.anchoredPosition = Vector2.zero;
+        gotItBtn.onClick.AddListener(CloseQuickGuideModal);
+
+        quickGuideModalObj = backdrop.gameObject;
+        quickGuideModalObj.SetActive(false);
     }
 
     public void ShowEnemyInfo(Enemy enemy)
@@ -420,7 +782,45 @@ public class GameplayUIManager : MonoBehaviour
     private void UpdateRoundCount(object param)
     {
         int round = (int)param;
-        if (roundText != null) roundText.text = round.ToString();
+        if (roundText == null) return;
+
+        // Hide legacy static "ROUND" label sibling so we can display rich stage/wave info cleanly
+        if (roundText.transform.parent != null)
+        {
+            Transform staticRoundLbl = roundText.transform.parent.Find("RoundTxt");
+            if (staticRoundLbl != null && staticRoundLbl.gameObject.activeSelf)
+            {
+                staticRoundLbl.gameObject.SetActive(false);
+                RectTransform rt = roundText.rectTransform;
+                rt.anchorMin = new Vector2(0f, 0f);
+                rt.anchorMax = new Vector2(1f, 1f);
+                rt.offsetMin = new Vector2(28f, 0f);
+                rt.offsetMax = new Vector2(-290f, 0f);
+                roundText.alignment = TextAlignmentOptions.Left;
+                roundText.enableWordWrapping = false;
+                roundText.enableAutoSizing = true;
+                roundText.fontSizeMin = 20f;
+                roundText.fontSizeMax = 36f;
+            }
+        }
+
+        bool isLevel = GameModeManager.Instance != null && GameModeManager.Instance.CurrentMode == GameModeType.Level;
+        if (isLevel)
+        {
+            LevelConfig cfg = GameModeManager.Instance.CurrentLevelConfig;
+            IGameModeStrategy strategy = BattleManager.Instance?.CurrentStrategy;
+            int totalWaves = strategy != null ? strategy.GetTotalWaves() : Mathf.Max(1, cfg?.MaxWaves ?? 3);
+            int lvId = cfg != null ? cfg.LevelID : 1;
+            bool isBoss = strategy != null && strategy.IsBossWave();
+            float threeStarHp = cfg != null ? cfg.threeStarHPThreshold : 70f;
+
+            string bossTag = isBoss ? " <color=#FBBF24>[BOSS]</color>" : "";
+            roundText.text = $"LV.{lvId} — WAVE {round}/{totalWaves}{bossTag}  <size=72%><color=#D6D3D1>(3★ >{threeStarHp:0}% HP)</color></size>";
+        }
+        else
+        {
+            roundText.text = $"ABYSSAL RIFT — ROUND {round}";
+        }
     }
 
     public void RefreshEnemyHP(Enemy enemy)

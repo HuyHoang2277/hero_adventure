@@ -55,11 +55,55 @@ public class VictoryUI : MonoBehaviour
     [SerializeField] private int baseExpEndless = 30;
 
     private Coroutine _showCoroutine;
+    private bool _isAnimating = false;
+    private bool _skipRequested = false;
+    private float _sequenceStartRealtime = 0f;
 
     private void Awake()
     {
         if (nextLevelButton != null) nextLevelButton.onClick.AddListener(OnNextLevelClicked);
         if (mainMenuButton != null) mainMenuButton.onClick.AddListener(OnMainMenuClicked);
+    }
+
+    private void Update()
+    {
+        if (_isAnimating && !_skipRequested && Time.realtimeSinceStartup - _sequenceStartRealtime > 0.25f)
+        {
+            if (InputHelper.GetPointerDown())
+            {
+                _skipRequested = true;
+            }
+        }
+    }
+
+    private IEnumerator WaitTweenOrSkip(Tween tween)
+    {
+        if (tween == null) yield break;
+        if (_skipRequested)
+        {
+            tween.Complete(true);
+            yield break;
+        }
+        while (tween.IsActive() && !tween.IsComplete())
+        {
+            if (_skipRequested)
+            {
+                tween.Complete(true);
+                yield break;
+            }
+            yield return null;
+        }
+    }
+
+    private IEnumerator WaitRealtimeOrSkip(float duration)
+    {
+        if (_skipRequested || duration <= 0f) yield break;
+        float end = Time.realtimeSinceStartup + duration;
+        while (Time.realtimeSinceStartup < end)
+        {
+            if (_skipRequested) yield break;
+            yield return null;
+        }
     }
 
     private void OnDestroy()
@@ -71,6 +115,9 @@ public class VictoryUI : MonoBehaviour
     public void Show(Player player = null, List<int> rewardOverrides = null)
     {
         if (AudioManager.Instance != null) AudioManager.Instance.PlaySoundWin();
+        _skipRequested = false;
+        _isAnimating = true;
+        _sequenceStartRealtime = Time.realtimeSinceStartup;
         dime.gameObject.SetActive(true);
         PrepareInitialState();
 
@@ -80,6 +127,8 @@ public class VictoryUI : MonoBehaviour
 
     public void Hide()
     {
+        _isAnimating = false;
+        _skipRequested = false;
         if (_showCoroutine != null) StopCoroutine(_showCoroutine);
         dime.gameObject.SetActive(false);
         if (victoryPopup != null) victoryPopup.gameObject.SetActive(false);
@@ -135,40 +184,40 @@ public class VictoryUI : MonoBehaviour
     {
         if (victoryPopup != null)
         {
-            yield return victoryPopup
+            Tween t = victoryPopup
                 .DOScale(1f, popupScaleDuration)
                 .SetEase(Ease.OutBack)
-                .SetUpdate(true)
-                .WaitForCompletion();
+                .SetUpdate(true);
+            yield return WaitTweenOrSkip(t);
         }
 
-        yield return new WaitForSecondsRealtime(gapAfterTitle * 0.5f);
+        yield return WaitRealtimeOrSkip(gapAfterTitle * 0.5f);
 
         if (victoryImg != null)
         {
             victoryImg.gameObject.SetActive(true);
             victoryImg.transform.localScale = Vector3.one * 1.3f;
 
-            yield return DOTween.Sequence()
+            Sequence seq = DOTween.Sequence()
                 .Append(victoryImg.DOFade(1f, victoryImgDuration * 0.5f))
                 .Join(victoryImg.transform.DOScale(1f, victoryImgDuration).SetEase(Ease.OutElastic))
-                .SetUpdate(true)
-                .WaitForCompletion();
+                .SetUpdate(true);
+            yield return WaitTweenOrSkip(seq);
         }
 
-        yield return new WaitForSecondsRealtime(gapAfterTitle);
+        yield return WaitRealtimeOrSkip(gapAfterTitle);
 
-        if (chestRewardImg != null)
+        if (chestRewardImg != null && !_skipRequested)
         {
             chestRewardImg.gameObject.SetActive(true);
-            yield return chestRewardImg
+            Tween t = chestRewardImg
                 .DOScale(1f, chestImgDuration)
                 .SetEase(Ease.OutBack)
-                .SetUpdate(true)
-                .WaitForCompletion();
+                .SetUpdate(true);
+            yield return WaitTweenOrSkip(t);
         }
 
-        yield return new WaitForSecondsRealtime(gapAfterChest);
+        yield return WaitRealtimeOrSkip(gapAfterChest);
 
         bool isLevel = GameModeManager.Instance != null &&
                        GameModeManager.Instance.CurrentMode == GameModeType.Level;
@@ -208,13 +257,13 @@ public class VictoryUI : MonoBehaviour
                 newStar.gameObject.SetActive(true);
                 newStar.transform.localScale = Vector3.zero;
 
-                yield return newStar.transform
+                Tween t = newStar.transform
                     .DOScale(1f, 0.3f)
                     .SetEase(Ease.OutBack)
-                    .SetUpdate(true)
-                    .WaitForCompletion();
+                    .SetUpdate(true);
+                yield return WaitTweenOrSkip(t);
 
-                yield return new WaitForSecondsRealtime(starStagger);
+                yield return WaitRealtimeOrSkip(starStagger);
             }
 
             if (cfg != null && DataManager.Instance != null && DataManager.Instance.GameData != null)
@@ -222,7 +271,7 @@ public class VictoryUI : MonoBehaviour
                 DataManager.Instance.GameData.SaveLevelStar(cfg.LevelID, starsToShow);
             }
 
-            yield return new WaitForSecondsRealtime(gapAfterStars);
+            yield return WaitRealtimeOrSkip(gapAfterStars);
         }
 
         if (chestRewardImg != null) chestRewardImg.gameObject.SetActive(false);
@@ -257,13 +306,13 @@ public class VictoryUI : MonoBehaviour
                 RewardItem newReward = Instantiate(rewardPrefab, rewardContainer);
                 Sprite icon = (i < sprites.Length) ? sprites[i] : null;
                 newReward.Init(icon, amount);
-                newReward.PlayShowAnimation(0.35f);
+                newReward.PlayShowAnimation(_skipRequested ? 0.05f : 0.35f);
 
-                yield return new WaitForSecondsRealtime(rewardStagger);
+                yield return WaitRealtimeOrSkip(rewardStagger);
             }
         }
 
-        yield return new WaitForSecondsRealtime(gapAfterRewards);
+        yield return WaitRealtimeOrSkip(gapAfterRewards);
 
         if (buttons != null)
         {
@@ -272,18 +321,23 @@ public class VictoryUI : MonoBehaviour
                 if (btn == null) continue;
 
                 CanvasGroup cg = GetOrAddCanvasGroup(btn.gameObject);
-                yield return cg.DOFade(1f, 0.25f)
+                Tween t = cg.DOFade(1f, 0.25f)
                     .SetUpdate(true)
                     .OnComplete(() =>
                     {
                         cg.interactable = true;
                         cg.blocksRaycasts = true;
-                    })
-                    .WaitForCompletion();
+                    });
+                yield return WaitTweenOrSkip(t);
+                cg.alpha = 1f;
+                cg.interactable = true;
+                cg.blocksRaycasts = true;
 
-                yield return new WaitForSecondsRealtime(buttonStagger);
+                yield return WaitRealtimeOrSkip(buttonStagger);
             }
         }
+
+        _isAnimating = false;
     }
 
     private int CalculateStars(Player player, LevelConfig cfg)

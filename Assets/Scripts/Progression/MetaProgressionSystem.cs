@@ -534,4 +534,64 @@ public static class MetaProgressionSystem
             : $"Claimed +{m.GoldReward}G & +{m.DiamondReward}D!";
         return true;
     }
+
+    public static bool HasClaimableMilestone(SecureGameData data)
+    {
+        if (data == null) return false;
+        for (int i = 0; i < Milestones.Length; i++)
+        {
+            if (data.IsRewardClaimed(i)) continue;
+            if (GetMilestoneCurrentProgress(Milestones[i], data) >= Milestones[i].TargetValue)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public static bool HasAffordableTalentUpgrade(SecureGameData data)
+    {
+        if (data == null) return false;
+        for (int i = 0; i < Talents.Length; i++)
+        {
+            int lv = data.GetTalentLevel(i);
+            if (lv < Talents[i].MaxLevel && data.Gold >= GetTalentUpgradeCost(i, lv))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public static bool HasActionableEquipment(SecureGameData data)
+    {
+        if (data == null) return false;
+
+        // 1. Có ô trang bị đang trống mà kho đồ có món cùng loại
+        for (int slot = 0; slot < SecureGameData.EQUIPMENT_SLOT_COUNT; slot++)
+        {
+            if (data.GetEquippedItemId(slot) >= 0) continue;
+            for (int i = 0; i < Equipments.Length; i++)
+            {
+                if ((int)Equipments[i].Slot == slot && data.GetEquipmentLevel(i) > 0)
+                {
+                    return true;
+                }
+            }
+        }
+
+        // 2. Có món đang mặc chưa đạt cấp tối đa và đủ Vàng nâng cấp
+        for (int slot = 0; slot < SecureGameData.EQUIPMENT_SLOT_COUNT; slot++)
+        {
+            int itemId = data.GetEquippedItemId(slot);
+            if (itemId < 0 || itemId >= Equipments.Length) continue;
+            int lv = data.GetEquipmentLevel(itemId);
+            if (lv > 0 && lv < MAX_EQUIPMENT_LEVEL && data.Gold >= GetEquipmentUpgradeCost(lv))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 }

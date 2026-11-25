@@ -55,12 +55,56 @@ public class DefeatUI : MonoBehaviour
     [SerializeField] private int baseExpEndless = 20;
 
     private Coroutine _showCoroutine;
+    private bool _isAnimating = false;
+    private bool _skipRequested = false;
+    private float _sequenceStartRealtime = 0f;
 
 
     private void Awake()
     {
         if (retryButton != null) retryButton.onClick.AddListener(OnRetryClicked);
         if (mainMenuButton != null) mainMenuButton.onClick.AddListener(OnMainMenuClicked);
+    }
+
+    private void Update()
+    {
+        if (_isAnimating && !_skipRequested && Time.realtimeSinceStartup - _sequenceStartRealtime > 0.25f)
+        {
+            if (InputHelper.GetPointerDown())
+            {
+                _skipRequested = true;
+            }
+        }
+    }
+
+    private IEnumerator WaitTweenOrSkip(Tween tween)
+    {
+        if (tween == null) yield break;
+        if (_skipRequested)
+        {
+            tween.Complete(true);
+            yield break;
+        }
+        while (tween.IsActive() && !tween.IsComplete())
+        {
+            if (_skipRequested)
+            {
+                tween.Complete(true);
+                yield break;
+            }
+            yield return null;
+        }
+    }
+
+    private IEnumerator WaitRealtimeOrSkip(float duration)
+    {
+        if (_skipRequested || duration <= 0f) yield break;
+        float end = Time.realtimeSinceStartup + duration;
+        while (Time.realtimeSinceStartup < end)
+        {
+            if (_skipRequested) yield break;
+            yield return null;
+        }
     }
 
     private void OnDestroy()
@@ -72,6 +116,9 @@ public class DefeatUI : MonoBehaviour
     public void Show(List<int> rewardOverrides = null)
     {
         if (AudioManager.Instance != null) AudioManager.Instance.PlaySoundLose();
+        _skipRequested = false;
+        _isAnimating = true;
+        _sequenceStartRealtime = Time.realtimeSinceStartup;
         dime.gameObject.SetActive(true);
         PrepareInitialState();
 
@@ -81,6 +128,8 @@ public class DefeatUI : MonoBehaviour
 
     public void Hide()
     {
+        _isAnimating = false;
+        _skipRequested = false;
         if (_showCoroutine != null) StopCoroutine(_showCoroutine);
         dime.gameObject.SetActive(false);
         if (defeatPopup != null) defeatPopup.gameObject.SetActive(false);
@@ -124,40 +173,40 @@ public class DefeatUI : MonoBehaviour
     {
         if (defeatPopup != null)
         {
-            yield return defeatPopup
+            Tween t = defeatPopup
                 .DOScale(1f, popupScaleDuration)
                 .SetEase(Ease.OutBack)
-                .SetUpdate(true)
-                .WaitForCompletion();
+                .SetUpdate(true);
+            yield return WaitTweenOrSkip(t);
         }
 
-        yield return new WaitForSecondsRealtime(gapAfterTitle * 0.5f);
+        yield return WaitRealtimeOrSkip(gapAfterTitle * 0.5f);
 
         if (defeatImg != null)
         {
             defeatImg.gameObject.SetActive(true);
             defeatImg.transform.localScale = Vector3.one * 1.3f;
 
-            yield return DOTween.Sequence()
+            Sequence seq = DOTween.Sequence()
                 .Append(defeatImg.DOFade(1f, defeatImgDuration * 0.5f))
                 .Join(defeatImg.transform.DOScale(1f, defeatImgDuration).SetEase(Ease.OutElastic))
-                .SetUpdate(true)
-                .WaitForCompletion();
+                .SetUpdate(true);
+            yield return WaitTweenOrSkip(seq);
         }
 
-        yield return new WaitForSecondsRealtime(gapAfterTitle);
+        yield return WaitRealtimeOrSkip(gapAfterTitle);
 
-        if (swordBrokenImg != null)
+        if (swordBrokenImg != null && !_skipRequested)
         {
             swordBrokenImg.gameObject.SetActive(true);
-            yield return swordBrokenImg
+            Tween t = swordBrokenImg
                 .DOScale(1f, swordImgDuration)
                 .SetEase(Ease.OutBack)
-                .SetUpdate(true)
-                .WaitForCompletion();
+                .SetUpdate(true);
+            yield return WaitTweenOrSkip(t);
         }
 
-        yield return new WaitForSecondsRealtime(gapAfterSword);
+        yield return WaitRealtimeOrSkip(gapAfterSword);
         
         if (swordBrokenImg != null) swordBrokenImg.gameObject.SetActive(false);
 
@@ -181,13 +230,13 @@ public class DefeatUI : MonoBehaviour
                 RewardItem newReward = Instantiate(rewardPrefab, rewardContainer);
                 Sprite icon = (i < sprites.Length) ? sprites[i] : null;
                 newReward.Init(icon, amount);
-                newReward.PlayShowAnimation(0.35f);
+                newReward.PlayShowAnimation(_skipRequested ? 0.05f : 0.35f);
 
-                yield return new WaitForSecondsRealtime(rewardStagger);
+                yield return WaitRealtimeOrSkip(rewardStagger);
             }
         }
 
-        yield return new WaitForSecondsRealtime(gapAfterRewards);
+        yield return WaitRealtimeOrSkip(gapAfterRewards);
 
         if (buttons != null)
         {
@@ -196,18 +245,23 @@ public class DefeatUI : MonoBehaviour
                 if (btn == null) continue;
 
                 CanvasGroup cg = GetOrAddCanvasGroup(btn.gameObject);
-                yield return cg.DOFade(1f, 0.25f)
+                Tween t = cg.DOFade(1f, 0.25f)
                     .SetUpdate(true)
                     .OnComplete(() =>
                     {
                         cg.interactable = true;
                         cg.blocksRaycasts = true;
-                    })
-                    .WaitForCompletion();
+                    });
+                yield return WaitTweenOrSkip(t);
+                cg.alpha = 1f;
+                cg.interactable = true;
+                cg.blocksRaycasts = true;
 
-                yield return new WaitForSecondsRealtime(buttonStagger);
+                yield return WaitRealtimeOrSkip(buttonStagger);
             }
         }
+
+        _isAnimating = false;
     }
 
     private List<int> BuildRewardAmounts()
