@@ -280,48 +280,48 @@ public class GameplayUIManager : MonoBehaviour
         Transform existing = topBarParent.Find("SpeedToggleButton");
         if (existing != null)
         {
-            speedToggleButton = existing.GetComponent<UnityEngine.UI.Button>();
-            speedButtonBg = existing.GetComponent<UnityEngine.UI.Image>();
-            speedButtonText = existing.GetComponentInChildren<TextMeshProUGUI>();
-            return;
+            Destroy(existing.gameObject);
         }
 
         RectTransform pauseRect = pauseButton.GetComponent<RectTransform>();
-        float pauseWidth = pauseRect != null && pauseRect.sizeDelta.x > 0f ? pauseRect.sizeDelta.x : 75f;
+        float pauseWidth = pauseRect != null && pauseRect.rect.width > 10f ? pauseRect.rect.width : 76f;
+        float pauseHeight = pauseRect != null && pauseRect.rect.height > 10f ? pauseRect.rect.height : 74f;
+        float rightEdgePadding = pauseRect != null ? Mathf.Abs(pauseRect.anchoredPosition.x) : 18f;
+        if (rightEdgePadding < 10f) rightEdgePadding = 18f;
 
-        GameObject btnObj = new GameObject("SpeedToggleButton");
-        btnObj.transform.SetParent(topBarParent, false);
+        // Framed antique-gold button matching PauseBtn height & vertical padding
+        RectTransform cardRt = MetaUIHelper.CreateFramedCard(
+            topBarParent,
+            "SpeedToggleButton",
+            SpeedNormalBgColor,
+            new Color(0.84f, 0.66f, 0.30f, 0.96f),
+            3f);
+        cardRt.anchorMin = new Vector2(1f, 0.5f);
+        cardRt.anchorMax = new Vector2(1f, 0.5f);
+        cardRt.pivot = new Vector2(1f, 0.5f);
+        cardRt.sizeDelta = new Vector2(84f, pauseHeight);
+        cardRt.anchoredPosition = new Vector2(-(rightEdgePadding + pauseWidth + 12f), 0f);
 
-        RectTransform btnRect = btnObj.AddComponent<RectTransform>();
-        btnRect.anchorMin = new Vector2(1f, 0f);
-        btnRect.anchorMax = new Vector2(1f, 1f);
-        btnRect.pivot = new Vector2(1f, 0.5f);
-        btnRect.sizeDelta = new Vector2(96f, 0f);
-        btnRect.anchoredPosition = new Vector2(-(pauseWidth + 14f), 0f);
+        UnityEngine.UI.Image borderImg = cardRt.GetComponent<UnityEngine.UI.Image>();
+        if (borderImg != null) borderImg.raycastTarget = true;
 
-        speedButtonBg = btnObj.AddComponent<UnityEngine.UI.Image>();
-        speedButtonBg.sprite = CharacterWorldHUD.GetRuntimeWhiteSprite();
-        speedButtonBg.color = SpeedNormalBgColor;
+        Transform fill = cardRt.Find("Fill");
+        speedButtonBg = fill != null ? fill.GetComponent<UnityEngine.UI.Image>() : borderImg;
 
-        speedToggleButton = btnObj.AddComponent<UnityEngine.UI.Button>();
+        speedToggleButton = cardRt.gameObject.AddComponent<UnityEngine.UI.Button>();
         speedToggleButton.targetGraphic = speedButtonBg;
 
-        GameObject labelObj = new GameObject("Label");
-        labelObj.transform.SetParent(btnObj.transform, false);
-        RectTransform labelRect = labelObj.AddComponent<RectTransform>();
-        labelRect.anchorMin = Vector2.zero;
-        labelRect.anchorMax = Vector2.one;
-        labelRect.offsetMin = Vector2.zero;
-        labelRect.offsetMax = Vector2.zero;
-
-        speedButtonText = labelObj.AddComponent<TextMeshProUGUI>();
-        if (DefaultFont != null) speedButtonText.font = DefaultFont;
-        speedButtonText.text = "1x";
-        speedButtonText.fontSize = 34f;
-        speedButtonText.fontStyle = FontStyles.Bold;
-        speedButtonText.alignment = TextAlignmentOptions.Center;
-        speedButtonText.color = Color.white;
-        speedButtonText.raycastTarget = false;
+        speedButtonText = MetaUIHelper.CreateText(
+            fill != null ? fill : cardRt,
+            "Label",
+            "1x",
+            30f,
+            new Color(0.98f, 0.94f, 0.84f, 1f),
+            TextAlignmentOptions.Center,
+            FontStyles.Bold);
+        speedButtonText.enableAutoSizing = true;
+        speedButtonText.fontSizeMin = 20f;
+        speedButtonText.fontSizeMax = 30f;
     }
 
     private void EnsureNotificationBanner()
@@ -593,29 +593,49 @@ public class GameplayUIManager : MonoBehaviour
         Transform existing = topBarParent.Find("QuickGuideButton");
         if (existing != null)
         {
-            quickGuideButton = existing.GetComponent<UnityEngine.UI.Button>();
-            return;
+            Destroy(existing.gameObject);
         }
 
         RectTransform pauseRect = pauseButton.GetComponent<RectTransform>();
-        float pauseWidth = pauseRect != null && pauseRect.sizeDelta.x > 0f ? pauseRect.sizeDelta.x : 75f;
-        float rightOffset = pauseWidth + 14f + 96f + 12f; // Left of SpeedToggleButton
+        float pauseWidth = pauseRect != null && pauseRect.rect.width > 10f ? pauseRect.rect.width : 76f;
+        float pauseHeight = pauseRect != null && pauseRect.rect.height > 10f ? pauseRect.rect.height : 74f;
+        float rightEdgePadding = pauseRect != null ? Mathf.Abs(pauseRect.anchoredPosition.x) : 18f;
+        if (rightEdgePadding < 10f) rightEdgePadding = 18f;
 
-        UnityEngine.UI.Button btn = MetaUIHelper.CreateButton(
+        float rightOffset = rightEdgePadding + pauseWidth + 12f + 84f + 10f; // Cleanly left of SpeedToggleButton
+
+        RectTransform cardRt = MetaUIHelper.CreateFramedCard(
             topBarParent,
             "QuickGuideButton",
-            "?",
-            34f,
-            new Color(0.56f, 0.18f, 0.16f, 0.95f),
-            out _,
-            out _);
+            new Color(0.58f, 0.16f, 0.15f, 0.96f),
+            new Color(0.84f, 0.66f, 0.30f, 0.96f),
+            3f);
+        cardRt.anchorMin = new Vector2(1f, 0.5f);
+        cardRt.anchorMax = new Vector2(1f, 0.5f);
+        cardRt.pivot = new Vector2(1f, 0.5f);
+        cardRt.sizeDelta = new Vector2(74f, pauseHeight);
+        cardRt.anchoredPosition = new Vector2(-rightOffset, 0f);
 
-        RectTransform btnRect = btn.GetComponent<RectTransform>();
-        btnRect.anchorMin = new Vector2(1f, 0f);
-        btnRect.anchorMax = new Vector2(1f, 1f);
-        btnRect.pivot = new Vector2(1f, 0.5f);
-        btnRect.sizeDelta = new Vector2(72f, 0f);
-        btnRect.anchoredPosition = new Vector2(-rightOffset, 0f);
+        UnityEngine.UI.Image borderImg = cardRt.GetComponent<UnityEngine.UI.Image>();
+        if (borderImg != null) borderImg.raycastTarget = true;
+
+        Transform fill = cardRt.Find("Fill");
+        UnityEngine.UI.Image fillImg = fill != null ? fill.GetComponent<UnityEngine.UI.Image>() : borderImg;
+
+        UnityEngine.UI.Button btn = cardRt.gameObject.AddComponent<UnityEngine.UI.Button>();
+        btn.targetGraphic = fillImg;
+
+        TextMeshProUGUI qTxt = MetaUIHelper.CreateText(
+            fill != null ? fill : cardRt,
+            "Label",
+            "?",
+            32f,
+            new Color(1f, 0.92f, 0.62f, 1f),
+            TextAlignmentOptions.Center,
+            FontStyles.Bold);
+        qTxt.enableAutoSizing = true;
+        qTxt.fontSizeMin = 22f;
+        qTxt.fontSizeMax = 32f;
 
         quickGuideButton = btn;
     }
@@ -864,7 +884,7 @@ public class GameplayUIManager : MonoBehaviour
             comboRowObj.transform,
             "MATCH 5+ / T / L",
             new Color(1f, 0.46f, 0.32f, 1f),
-            new[] { boltSp, boltSp, swordSp, boltSp, boltSp },
+            new[] { boltSp, boltSp, boltSp, boltSp, boltSp },
             "CROSS BLAST!\nClears Row + Col & Cleaves foes.");
 
         BuildVisualComboCard(
@@ -1050,11 +1070,10 @@ public class GameplayUIManager : MonoBehaviour
 
     public void ShowEnemyInfo(Enemy enemy)
     {
-        if (enemy == null) return;
-        currentShownEnemy = enemy;
-        if (enemyInfoPanel != null) enemyInfoPanel.SetActive(true);
-        if (enemySprite != null) enemySprite.sprite = enemy.CharacterSprite;
-        RefreshEnemyHP(enemy);
+        // Đã có thanh máu & giáp trực tiếp dưới chân từng quái (CharacterWorldHUD),
+        // tắt hẳn panel máu quái cũ trên TopBar để không che khu vực Round & Pause.
+        currentShownEnemy = null;
+        if (enemyInfoPanel != null) enemyInfoPanel.SetActive(false);
     }
 
     public void HideEnemyInfo()
@@ -1067,12 +1086,20 @@ public class GameplayUIManager : MonoBehaviour
     {
         if (param is Player player)
         {
-            if (hpText != null) hpText.text = $"{player.CurrentHealth}/{player.CurrentMaxHealth}";
-            if (shieldText != null) shieldText.text = $"{player.CurrentShield}";
-            if (damageText != null) damageText.text = $"{player.CurrentDamage}";
-            if (critRateText != null) critRateText.text = $"{player.CurrentCritRate}%";
-            if (critDamageText != null) critDamageText.text = $"{player.CurrentCritDamage}%";
-            if (blockRateText != null) blockRateText.text = $"{player.CurrentBlockRate}%";
+            int curHp = player.CurrentHealth > 0f ? Mathf.CeilToInt(player.CurrentHealth) : 0;
+            int maxHp = Mathf.RoundToInt(player.CurrentMaxHealth);
+            int shd = Mathf.RoundToInt(player.CurrentShield);
+            int dmg = Mathf.RoundToInt(player.CurrentDamage);
+            int crit = Mathf.RoundToInt(player.CurrentCritRate);
+            int cDmg = Mathf.RoundToInt(player.CurrentCritDamage);
+            int dodge = Mathf.RoundToInt(player.CurrentBlockRate);
+
+            if (hpText != null) hpText.text = $"{curHp}/{maxHp}";
+            if (shieldText != null) shieldText.text = $"{shd}";
+            if (damageText != null) damageText.text = $"{dmg}";
+            if (critRateText != null) critRateText.text = $"{crit}%";
+            if (critDamageText != null) critDamageText.text = $"{cDmg}%";
+            if (blockRateText != null) blockRateText.text = $"{dodge}%";
 
             float safeMaxHp = Mathf.Max(1f, player.CurrentMaxHealth);
             if (playerHpFill != null)
@@ -1093,25 +1120,28 @@ public class GameplayUIManager : MonoBehaviour
         int round = (int)param;
         if (roundText == null) return;
 
-        // Hide legacy static "ROUND" label sibling so we can display rich stage/wave info cleanly
+        // Hide legacy static "ROUND" label sibling and give roundText full wide TopBar room (680px) so font stays large!
         if (roundText.transform.parent != null)
         {
             Transform staticRoundLbl = roundText.transform.parent.Find("RoundTxt");
             if (staticRoundLbl != null && staticRoundLbl.gameObject.activeSelf)
             {
                 staticRoundLbl.gameObject.SetActive(false);
-                RectTransform rt = roundText.rectTransform;
-                rt.anchorMin = new Vector2(0f, 0f);
-                rt.anchorMax = new Vector2(1f, 1f);
-                rt.offsetMin = new Vector2(28f, 0f);
-                rt.offsetMax = new Vector2(-290f, 0f);
-                roundText.alignment = TextAlignmentOptions.Left;
-                roundText.enableWordWrapping = false;
-                roundText.enableAutoSizing = true;
-                roundText.fontSizeMin = 20f;
-                roundText.fontSizeMax = 36f;
             }
         }
+
+        RectTransform rt = roundText.rectTransform;
+        rt.anchorMin = new Vector2(0f, 0.5f);
+        rt.anchorMax = new Vector2(0f, 0.5f);
+        rt.pivot = new Vector2(0f, 0.5f);
+        rt.anchoredPosition = new Vector2(26f, 0f);
+        rt.sizeDelta = new Vector2(680f, 78f);
+        roundText.alignment = TextAlignmentOptions.Left;
+        roundText.enableWordWrapping = false;
+        roundText.enableAutoSizing = true;
+        roundText.fontSizeMin = 28f;
+        roundText.fontSizeMax = 42f;
+        roundText.color = new Color(0.98f, 0.94f, 0.84f, 1f);
 
         bool isLevel = GameModeManager.Instance != null && GameModeManager.Instance.CurrentMode == GameModeType.Level;
         if (isLevel)
@@ -1134,16 +1164,7 @@ public class GameplayUIManager : MonoBehaviour
 
     public void RefreshEnemyHP(Enemy enemy)
     {
-        if (enemy == null) return;
-        if (currentShownEnemy != null && enemy != currentShownEnemy) return;
-
-        if (enemyHpText != null)
-            enemyHpText.text = $"{enemy.CurrentHealth}/{enemy.CurrentMaxHealth}";
-        if (enemyHpFill != null)
-        {
-            float fillAmount = enemy.CurrentHealth / Mathf.Max(1f, enemy.CurrentMaxHealth);
-            enemyHpFill.DOFillAmount(fillAmount, 0.3f).SetEase(Ease.OutQuad);
-        }
+        // Deprecated top enemy bar disabled in favor of CharacterWorldHUD
     }
 
     private void EnsurePopupPool()
